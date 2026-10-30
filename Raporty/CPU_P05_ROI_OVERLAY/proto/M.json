@@ -1,0 +1,18 @@
+{
+ "variant": "roi_each",
+ "regions": 1,
+ "region_pct": 25.0,
+ "atlas_pct": 25.0,
+ "uncovered_alpha_px": 528709,
+ "graph": "[0:v]null[base];[1:v]setpts=PTS-STARTPTS[atl];[atl]crop=3840:540:0:0,scale=in_range=full:out_range=full:out_color_matrix=bt2020:flags=bicubic,format=yuva420p10le[r0];[base][r0]overlay=0:0:shortest=1:format=yuv420p10[vtemp]",
+ "mode": "time",
+ "layout": "def",
+ "frame": 160,
+ "rc": 0,
+ "wall_s": 5.374,
+ "wall_fps": 55.82,
+ "steady_fps": 60.48,
+ "cores": 11.48,
+ "core_s_per_frame": 0.2056,
+ "errors": []
+}

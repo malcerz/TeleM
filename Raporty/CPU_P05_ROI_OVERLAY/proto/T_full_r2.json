@@ -1,0 +1,13 @@
+{
+ "variant": "full",
+ "mode": "time",
+ "layout": "def",
+ "frame": 160,
+ "rc": 0,
+ "wall_s": 10.238,
+ "wall_fps": 29.3,
+ "steady_fps": 30.19,
+ "cores": 8.68,
+ "core_s_per_frame": 0.2962,
+ "errors": []
+}

@@ -1,0 +1,16 @@
+{
+ "variant": "full",
+ "mode": "time",
+ "layout": "def",
+ "frame": 160,
+ "rc": 0,
+ "wall_s": 39.699,
+ "wall_fps": 7.56,
+ "steady_fps": 7.78,
+ "cores": 13.88,
+ "core_s_per_frame": 1.8368,
+ "rss_peak_mb": 5143,
+ "x265_fps": 7.66,
+ "x265_kbps": 19021.86,
+ "errors": []
+}

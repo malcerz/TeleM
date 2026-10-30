@@ -1,0 +1,1570 @@
+{
+ "summary": {
+  "tag": "run_v3",
+  "env": [
+   "TELEM_CPU_DIAG_DUMP_FRAMES=0,80,160,240,319",
+   "TELEM_CPU_DIAG_DUMP_DIR=C:\\_DEV\\SportCamHUD\\Raporty\\CPU_P05_ROI_OVERLAY\\frames\\v3"
+  ],
+  "extra": "--profile fast --bitrate 16M --layout C:\\_DEV\\SportCamHUD\\presets\\cycling_dashboard_v3.json",
+  "frames": 320,
+  "start_frame": 900,
+  "returncode": 0,
+  "process_wall_s": 39.59,
+  "sys_used_gb_before": 15.16,
+  "sys_used_gb_peak": 19.57,
+  "window_s": [
+   9.71,
+   35.01
+  ],
+  "sys_cpu_pct_window": 89.1,
+  "cores_window": {
+   "main": 0.29,
+   "ffmpeg": 11.44,
+   "worker": 0.98,
+   "other": 0.0
+  },
+  "rss_peak_mb": {
+   "main": 446.6,
+   "ffmpeg": 3288.1,
+   "worker": 1069.9,
+   "other": 77.3
+  },
+  "n_procs_peak": {
+   "main": 1,
+   "ffmpeg": 1,
+   "worker": 2,
+   "other": 1
+  },
+  "bench_line": "[BENCH RESULT] mode=direct success=True frames=320 elapsed=30.6s fps=10.5",
+  "harness": {
+   "success": true,
+   "error": "",
+   "elapsed_s": 30.6,
+   "total_frames": 320,
+   "effective_fps": 10.46,
+   "project_load_until_click_s": 4.624704500005464
+  },
+  "stream": {
+   "stream_wall_s": 29.088903999996546,
+   "first_piped_frame_s": 0.861923399999796,
+   "pipe_first_to_last_s": 26.513354099995922,
+   "pipe_steady_fps": 11.926284951620557,
+   "pipe_steady_window_frames": [
+    33,
+    288
+   ],
+   "ffmpeg_drain_and_finalize_s": 1.9121551999996882,
+   "frames_written": 320,
+   "workers": null,
+   "shm_slots": null
+  },
+  "x265_rc": "Rate Control / qCompress            : ABR-16000 kbps / 0.60",
+  "x265": {
+   "frames": 320,
+   "s": 27.91,
+   "fps": 11.47,
+   "kbps": 19662.26
+  },
+  "validation": {
+   "valid": true,
+   "actual_video_frames": 320,
+   "av": {
+    "duration": 10.677333,
+    "has_video": true,
+    "has_audio": true,
+    "streams_count": 2,
+    "size_bytes": 26598405,
+    "timing_error": null
+   },
+   "color_valid": true
+  },
+  "output_bytes": 26598405
+ },
+ "series": [
+  {
+   "t": 0.51,
+   "sys_cpu": 10.7,
+   "sys_used_gb": 15.23,
+   "roles": {
+    "main": {
+     "cores": 0.78,
+     "rss_mb": 75.5,
+     "n": 1
+    }
+   }
+  },
+  {
+   "t": 1.02,
+   "sys_cpu": 10.1,
+   "sys_used_gb": 15.29,
+   "roles": {
+    "main": {
+     "cores": 0.92,
+     "rss_mb": 145.9,
+     "n": 1
+    }
+   }
+  },
+  {
+   "t": 1.53,
+   "sys_cpu": 12.2,
+   "sys_used_gb": 15.36,
+   "roles": {
+    "main": {
+     "cores": 0.37,
+     "rss_mb": 183.0,
+     "n": 1
+    },
+    "other": {
+     "cores": 0.64,
+     "rss_mb": 76.9,
+     "n": 1
+    }
+   }
+  },
+  {
+   "t": 2.04,
+   "sys_cpu": 12.1,
+   "sys_used_gb": 15.35,
+   "roles": {
+    "main": {
+     "cores": 0.09,
+     "rss_mb": 186.3,
+     "n": 1
+    },
+    "other": {
+     "cores": 0.64,
+     "rss_mb": 77.3,
+     "n": 1
+    }
+   }
+  },
+  {
+   "t": 2.55,
+   "sys_cpu": 8.9,
+   "sys_used_gb": 15.35,
+   "roles": {
+    "main": {
+     "cores": 0.03,
+     "rss_mb": 187.4,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 0.12,
+     "rss_mb": 24.0,
+     "n": 1
+    }
+   }
+  },
+  {
+   "t": 3.06,
+   "sys_cpu": 19.3,
+   "sys_used_gb": 15.39,
+   "roles": {
+    "main": {
+     "cores": 0.49,
+     "rss_mb": 206.8,
+     "n": 1
+    },
+    "other": {
+     "cores": 0.09,
+     "rss_mb": 22.3,
+     "n": 1
+    }
+   }
+  },
+  {
+   "t": 3.57,
+   "sys_cpu": 18.5,
+   "sys_used_gb": 15.37,
+   "roles": {
+    "main": {
+     "cores": 0.12,
+     "rss_mb": 224.2,
+     "n": 1
+    }
+   }
+  },
+  {
+   "t": 4.08,
+   "sys_cpu": 11.7,
+   "sys_used_gb": 15.41,
+   "roles": {
+    "main": {
+     "cores": 0.61,
+     "rss_mb": 279.7,
+     "n": 1
+    }
+   }
+  },
+  {
+   "t": 4.6,
+   "sys_cpu": 7.8,
+   "sys_used_gb": 15.37,
+   "roles": {
+    "main": {
+     "cores": 0.92,
+     "rss_mb": 289.0,
+     "n": 1
+    }
+   }
+  },
+  {
+   "t": 5.11,
+   "sys_cpu": 14.1,
+   "sys_used_gb": 15.35,
+   "roles": {
+    "main": {
+     "cores": 1.1,
+     "rss_mb": 276.3,
+     "n": 1
+    }
+   }
+  },
+  {
+   "t": 5.62,
+   "sys_cpu": 8.9,
+   "sys_used_gb": 15.42,
+   "roles": {
+    "main": {
+     "cores": 0.49,
+     "rss_mb": 287.7,
+     "n": 1
+    },
+    "worker": {
+     "cores": 0.46,
+     "rss_mb": 60.2,
+     "n": 1
+    }
+   }
+  },
+  {
+   "t": 6.13,
+   "sys_cpu": 13.1,
+   "sys_used_gb": 15.43,
+   "roles": {
+    "main": {
+     "cores": 0.37,
+     "rss_mb": 288.7,
+     "n": 1
+    },
+    "worker": {
+     "cores": 0.98,
+     "rss_mb": 86.7,
+     "n": 1
+    }
+   }
+  },
+  {
+   "t": 6.64,
+   "sys_cpu": 11.7,
+   "sys_used_gb": 15.37,
+   "roles": {
+    "main": {
+     "cores": 0.37,
+     "rss_mb": 281.9,
+     "n": 1
+    }
+   }
+  },
+  {
+   "t": 7.16,
+   "sys_cpu": 10.6,
+   "sys_used_gb": 15.43,
+   "roles": {
+    "main": {
+     "cores": 0.49,
+     "rss_mb": 309.6,
+     "n": 1
+    },
+    "worker": {
+     "cores": 0.61,
+     "rss_mb": 57.8,
+     "n": 1
+    }
+   }
+  },
+  {
+   "t": 7.67,
+   "sys_cpu": 8.0,
+   "sys_used_gb": 15.44,
+   "roles": {
+    "main": {
+     "cores": 0.0,
+     "rss_mb": 309.6,
+     "n": 1
+    },
+    "worker": {
+     "cores": 0.95,
+     "rss_mb": 73.9,
+     "n": 1
+    }
+   }
+  },
+  {
+   "t": 8.18,
+   "sys_cpu": 11.2,
+   "sys_used_gb": 15.39,
+   "roles": {
+    "main": {
+     "cores": 0.43,
+     "rss_mb": 311.0,
+     "n": 1
+    }
+   }
+  },
+  {
+   "t": 8.69,
+   "sys_cpu": 14.9,
+   "sys_used_gb": 15.44,
+   "roles": {
+    "main": {
+     "cores": 0.21,
+     "rss_mb": 323.9,
+     "n": 1
+    },
+    "worker": {
+     "cores": 0.76,
+     "rss_mb": 64.4,
+     "n": 1
+    }
+   }
+  },
+  {
+   "t": 9.2,
+   "sys_cpu": 12.2,
+   "sys_used_gb": 15.4,
+   "roles": {
+    "main": {
+     "cores": 0.03,
+     "rss_mb": 319.1,
+     "n": 1
+    }
+   }
+  },
+  {
+   "t": 9.71,
+   "sys_cpu": 10.6,
+   "sys_used_gb": 15.49,
+   "roles": {
+    "main": {
+     "cores": 0.15,
+     "rss_mb": 320.4,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 0.06,
+     "rss_mb": 54.1,
+     "n": 1
+    },
+    "worker": {
+     "cores": 0.58,
+     "rss_mb": 56.0,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 10.22,
+   "sys_cpu": 22.8,
+   "sys_used_gb": 15.73,
+   "roles": {
+    "main": {
+     "cores": 0.0,
+     "rss_mb": 319.9,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 0.0,
+     "rss_mb": 54.1,
+     "n": 1
+    },
+    "worker": {
+     "cores": 1.68,
+     "rss_mb": 311.2,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 10.74,
+   "sys_cpu": 59.9,
+   "sys_used_gb": 17.1,
+   "roles": {
+    "main": {
+     "cores": 0.48,
+     "rss_mb": 446.5,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 7.42,
+     "rss_mb": 1297.6,
+     "n": 1
+    },
+    "worker": {
+     "cores": 1.24,
+     "rss_mb": 521.9,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 11.3,
+   "sys_cpu": 98.0,
+   "sys_used_gb": 17.96,
+   "roles": {
+    "main": {
+     "cores": 0.45,
+     "rss_mb": 446.5,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 11.41,
+     "rss_mb": 1997.8,
+     "n": 1
+    },
+    "worker": {
+     "cores": 1.63,
+     "rss_mb": 669.6,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 11.83,
+   "sys_cpu": 98.2,
+   "sys_used_gb": 18.78,
+   "roles": {
+    "main": {
+     "cores": 0.3,
+     "rss_mb": 446.5,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 13.24,
+     "rss_mb": 2844.4,
+     "n": 1
+    },
+    "worker": {
+     "cores": 1.39,
+     "rss_mb": 707.6,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 12.36,
+   "sys_cpu": 92.3,
+   "sys_used_gb": 19.15,
+   "roles": {
+    "main": {
+     "cores": 0.35,
+     "rss_mb": 446.5,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 11.67,
+     "rss_mb": 3070.8,
+     "n": 1
+    },
+    "worker": {
+     "cores": 1.24,
+     "rss_mb": 825.3,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 12.88,
+   "sys_cpu": 92.4,
+   "sys_used_gb": 19.32,
+   "roles": {
+    "main": {
+     "cores": 0.47,
+     "rss_mb": 446.5,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 11.85,
+     "rss_mb": 3169.3,
+     "n": 1
+    },
+    "worker": {
+     "cores": 1.33,
+     "rss_mb": 931.4,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 13.4,
+   "sys_cpu": 92.3,
+   "sys_used_gb": 19.11,
+   "roles": {
+    "main": {
+     "cores": 0.3,
+     "rss_mb": 446.5,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 11.75,
+     "rss_mb": 3203.8,
+     "n": 1
+    },
+    "worker": {
+     "cores": 1.2,
+     "rss_mb": 688.6,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 13.93,
+   "sys_cpu": 95.4,
+   "sys_used_gb": 19.21,
+   "roles": {
+    "main": {
+     "cores": 0.75,
+     "rss_mb": 446.5,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 11.6,
+     "rss_mb": 3269.0,
+     "n": 1
+    },
+    "worker": {
+     "cores": 1.17,
+     "rss_mb": 705.0,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 14.46,
+   "sys_cpu": 93.6,
+   "sys_used_gb": 19.1,
+   "roles": {
+    "main": {
+     "cores": 0.32,
+     "rss_mb": 446.5,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 12.48,
+     "rss_mb": 3271.6,
+     "n": 1
+    },
+    "worker": {
+     "cores": 0.94,
+     "rss_mb": 581.6,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 14.98,
+   "sys_cpu": 95.3,
+   "sys_used_gb": 19.2,
+   "roles": {
+    "main": {
+     "cores": 0.39,
+     "rss_mb": 446.5,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 11.57,
+     "rss_mb": 3272.0,
+     "n": 1
+    },
+    "worker": {
+     "cores": 1.13,
+     "rss_mb": 686.6,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 15.5,
+   "sys_cpu": 92.7,
+   "sys_used_gb": 19.2,
+   "roles": {
+    "main": {
+     "cores": 0.12,
+     "rss_mb": 446.5,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 12.17,
+     "rss_mb": 3272.1,
+     "n": 1
+    },
+    "worker": {
+     "cores": 0.84,
+     "rss_mb": 668.9,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 16.03,
+   "sys_cpu": 93.8,
+   "sys_used_gb": 19.31,
+   "roles": {
+    "main": {
+     "cores": 0.41,
+     "rss_mb": 446.5,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 11.5,
+     "rss_mb": 3272.3,
+     "n": 1
+    },
+    "worker": {
+     "cores": 1.13,
+     "rss_mb": 782.2,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 16.55,
+   "sys_cpu": 94.7,
+   "sys_used_gb": 19.26,
+   "roles": {
+    "main": {
+     "cores": 0.27,
+     "rss_mb": 446.5,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 13.36,
+     "rss_mb": 3177.7,
+     "n": 1
+    },
+    "worker": {
+     "cores": 0.93,
+     "rss_mb": 853.3,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 17.1,
+   "sys_cpu": 89.4,
+   "sys_used_gb": 19.49,
+   "roles": {
+    "main": {
+     "cores": 0.37,
+     "rss_mb": 446.5,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 10.33,
+     "rss_mb": 3272.9,
+     "n": 1
+    },
+    "worker": {
+     "cores": 1.15,
+     "rss_mb": 967.4,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 17.63,
+   "sys_cpu": 92.8,
+   "sys_used_gb": 19.02,
+   "roles": {
+    "main": {
+     "cores": 0.12,
+     "rss_mb": 446.5,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 12.21,
+     "rss_mb": 3183.6,
+     "n": 1
+    },
+    "worker": {
+     "cores": 0.73,
+     "rss_mb": 601.4,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 18.16,
+   "sys_cpu": 91.8,
+   "sys_used_gb": 19.27,
+   "roles": {
+    "main": {
+     "cores": 0.12,
+     "rss_mb": 446.6,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 10.36,
+     "rss_mb": 3288.1,
+     "n": 1
+    },
+    "worker": {
+     "cores": 1.04,
+     "rss_mb": 701.0,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 18.68,
+   "sys_cpu": 93.1,
+   "sys_used_gb": 19.28,
+   "roles": {
+    "main": {
+     "cores": 0.33,
+     "rss_mb": 446.6,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 12.0,
+     "rss_mb": 3217.4,
+     "n": 1
+    },
+    "worker": {
+     "cores": 0.59,
+     "rss_mb": 767.1,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 19.23,
+   "sys_cpu": 92.1,
+   "sys_used_gb": 19.48,
+   "roles": {
+    "main": {
+     "cores": 0.2,
+     "rss_mb": 446.6,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 11.19,
+     "rss_mb": 3281.2,
+     "n": 1
+    },
+    "worker": {
+     "cores": 1.06,
+     "rss_mb": 869.0,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 19.75,
+   "sys_cpu": 94.5,
+   "sys_used_gb": 19.47,
+   "roles": {
+    "main": {
+     "cores": 0.48,
+     "rss_mb": 446.6,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 12.45,
+     "rss_mb": 3281.4,
+     "n": 1
+    },
+    "worker": {
+     "cores": 0.6,
+     "rss_mb": 916.7,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 20.28,
+   "sys_cpu": 94.0,
+   "sys_used_gb": 19.36,
+   "roles": {
+    "main": {
+     "cores": 0.33,
+     "rss_mb": 446.6,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 10.63,
+     "rss_mb": 3281.6,
+     "n": 1
+    },
+    "worker": {
+     "cores": 1.15,
+     "rss_mb": 735.8,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 20.8,
+   "sys_cpu": 90.9,
+   "sys_used_gb": 19.41,
+   "roles": {
+    "main": {
+     "cores": 0.33,
+     "rss_mb": 446.6,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 12.46,
+     "rss_mb": 3281.9,
+     "n": 1
+    },
+    "worker": {
+     "cores": 0.69,
+     "rss_mb": 789.4,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 21.33,
+   "sys_cpu": 93.0,
+   "sys_used_gb": 19.49,
+   "roles": {
+    "main": {
+     "cores": 0.24,
+     "rss_mb": 446.6,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 12.08,
+     "rss_mb": 3282.4,
+     "n": 1
+    },
+    "worker": {
+     "cores": 1.09,
+     "rss_mb": 901.4,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 21.85,
+   "sys_cpu": 92.2,
+   "sys_used_gb": 19.5,
+   "roles": {
+    "main": {
+     "cores": 0.36,
+     "rss_mb": 446.6,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 12.69,
+     "rss_mb": 3282.9,
+     "n": 1
+    },
+    "worker": {
+     "cores": 0.6,
+     "rss_mb": 949.4,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 22.38,
+   "sys_cpu": 93.8,
+   "sys_used_gb": 19.18,
+   "roles": {
+    "main": {
+     "cores": 0.32,
+     "rss_mb": 446.6,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 12.13,
+     "rss_mb": 3283.0,
+     "n": 1
+    },
+    "worker": {
+     "cores": 1.2,
+     "rss_mb": 629.5,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 22.91,
+   "sys_cpu": 93.6,
+   "sys_used_gb": 19.19,
+   "roles": {
+    "main": {
+     "cores": 0.21,
+     "rss_mb": 446.6,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 12.84,
+     "rss_mb": 3251.6,
+     "n": 1
+    },
+    "worker": {
+     "cores": 0.65,
+     "rss_mb": 689.6,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 23.44,
+   "sys_cpu": 94.2,
+   "sys_used_gb": 19.37,
+   "roles": {
+    "main": {
+     "cores": 0.42,
+     "rss_mb": 446.6,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 11.42,
+     "rss_mb": 3283.3,
+     "n": 1
+    },
+    "worker": {
+     "cores": 0.95,
+     "rss_mb": 798.5,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 23.96,
+   "sys_cpu": 93.2,
+   "sys_used_gb": 19.3,
+   "roles": {
+    "main": {
+     "cores": 0.21,
+     "rss_mb": 446.6,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 12.73,
+     "rss_mb": 3189.1,
+     "n": 1
+    },
+    "worker": {
+     "cores": 0.69,
+     "rss_mb": 865.5,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 24.49,
+   "sys_cpu": 87.0,
+   "sys_used_gb": 19.36,
+   "roles": {
+    "main": {
+     "cores": 0.29,
+     "rss_mb": 446.6,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 11.96,
+     "rss_mb": 3189.1,
+     "n": 1
+    },
+    "worker": {
+     "cores": 1.05,
+     "rss_mb": 887.5,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 25.03,
+   "sys_cpu": 93.2,
+   "sys_used_gb": 19.43,
+   "roles": {
+    "main": {
+     "cores": 0.35,
+     "rss_mb": 446.6,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 12.15,
+     "rss_mb": 3189.1,
+     "n": 1
+    },
+    "worker": {
+     "cores": 1.01,
+     "rss_mb": 970.3,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 25.56,
+   "sys_cpu": 91.2,
+   "sys_used_gb": 19.33,
+   "roles": {
+    "main": {
+     "cores": 0.21,
+     "rss_mb": 446.6,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 10.68,
+     "rss_mb": 3189.1,
+     "n": 1
+    },
+    "worker": {
+     "cores": 0.98,
+     "rss_mb": 844.3,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 26.08,
+   "sys_cpu": 94.2,
+   "sys_used_gb": 19.45,
+   "roles": {
+    "main": {
+     "cores": 0.21,
+     "rss_mb": 446.6,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 12.64,
+     "rss_mb": 3189.1,
+     "n": 1
+    },
+    "worker": {
+     "cores": 0.93,
+     "rss_mb": 923.7,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 26.61,
+   "sys_cpu": 92.0,
+   "sys_used_gb": 19.08,
+   "roles": {
+    "main": {
+     "cores": 0.21,
+     "rss_mb": 446.6,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 11.31,
+     "rss_mb": 3189.6,
+     "n": 1
+    },
+    "worker": {
+     "cores": 1.04,
+     "rss_mb": 573.8,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 27.14,
+   "sys_cpu": 93.4,
+   "sys_used_gb": 19.13,
+   "roles": {
+    "main": {
+     "cores": 0.24,
+     "rss_mb": 446.6,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 11.93,
+     "rss_mb": 3221.2,
+     "n": 1
+    },
+    "worker": {
+     "cores": 0.97,
+     "rss_mb": 656.0,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 27.67,
+   "sys_cpu": 86.8,
+   "sys_used_gb": 19.19,
+   "roles": {
+    "main": {
+     "cores": 0.42,
+     "rss_mb": 446.6,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 11.53,
+     "rss_mb": 3189.6,
+     "n": 1
+    },
+    "worker": {
+     "cores": 0.8,
+     "rss_mb": 746.0,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 28.19,
+   "sys_cpu": 93.0,
+   "sys_used_gb": 19.26,
+   "roles": {
+    "main": {
+     "cores": 0.35,
+     "rss_mb": 446.6,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 12.44,
+     "rss_mb": 3189.6,
+     "n": 1
+    },
+    "worker": {
+     "cores": 0.95,
+     "rss_mb": 822.7,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 28.72,
+   "sys_cpu": 86.9,
+   "sys_used_gb": 19.25,
+   "roles": {
+    "main": {
+     "cores": 0.3,
+     "rss_mb": 446.6,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 11.69,
+     "rss_mb": 3189.6,
+     "n": 1
+    },
+    "worker": {
+     "cores": 0.83,
+     "rss_mb": 818.3,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 29.24,
+   "sys_cpu": 95.3,
+   "sys_used_gb": 19.36,
+   "roles": {
+    "main": {
+     "cores": 0.24,
+     "rss_mb": 446.6,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 12.16,
+     "rss_mb": 3190.2,
+     "n": 1
+    },
+    "worker": {
+     "cores": 0.96,
+     "rss_mb": 899.9,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 29.77,
+   "sys_cpu": 94.2,
+   "sys_used_gb": 19.45,
+   "roles": {
+    "main": {
+     "cores": 0.18,
+     "rss_mb": 446.6,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 12.04,
+     "rss_mb": 3190.2,
+     "n": 1
+    },
+    "worker": {
+     "cores": 0.87,
+     "rss_mb": 982.0,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 30.29,
+   "sys_cpu": 93.4,
+   "sys_used_gb": 19.55,
+   "roles": {
+    "main": {
+     "cores": 0.36,
+     "rss_mb": 446.6,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 12.52,
+     "rss_mb": 3190.2,
+     "n": 1
+    },
+    "worker": {
+     "cores": 0.96,
+     "rss_mb": 1060.9,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 30.81,
+   "sys_cpu": 95.6,
+   "sys_used_gb": 19.19,
+   "roles": {
+    "main": {
+     "cores": 0.27,
+     "rss_mb": 446.6,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 13.4,
+     "rss_mb": 3190.2,
+     "n": 1
+    },
+    "worker": {
+     "cores": 1.02,
+     "rss_mb": 708.9,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 31.34,
+   "sys_cpu": 89.3,
+   "sys_used_gb": 19.06,
+   "roles": {
+    "main": {
+     "cores": 0.32,
+     "rss_mb": 446.6,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 11.81,
+     "rss_mb": 3190.7,
+     "n": 1
+    },
+    "worker": {
+     "cores": 0.91,
+     "rss_mb": 579.7,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 31.87,
+   "sys_cpu": 97.0,
+   "sys_used_gb": 19.13,
+   "roles": {
+    "main": {
+     "cores": 0.18,
+     "rss_mb": 446.6,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 13.51,
+     "rss_mb": 3191.3,
+     "n": 1
+    },
+    "worker": {
+     "cores": 0.86,
+     "rss_mb": 661.4,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 32.39,
+   "sys_cpu": 90.9,
+   "sys_used_gb": 19.21,
+   "roles": {
+    "main": {
+     "cores": 0.24,
+     "rss_mb": 446.6,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 11.78,
+     "rss_mb": 3191.3,
+     "n": 1
+    },
+    "worker": {
+     "cores": 0.93,
+     "rss_mb": 744.3,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 32.92,
+   "sys_cpu": 95.2,
+   "sys_used_gb": 19.31,
+   "roles": {
+    "main": {
+     "cores": 0.18,
+     "rss_mb": 446.6,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 12.52,
+     "rss_mb": 3193.5,
+     "n": 1
+    },
+    "worker": {
+     "cores": 0.88,
+     "rss_mb": 826.8,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 33.44,
+   "sys_cpu": 93.2,
+   "sys_used_gb": 19.31,
+   "roles": {
+    "main": {
+     "cores": 0.21,
+     "rss_mb": 446.6,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 12.79,
+     "rss_mb": 3194.4,
+     "n": 1
+    },
+    "worker": {
+     "cores": 0.81,
+     "rss_mb": 825.1,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 33.97,
+   "sys_cpu": 90.6,
+   "sys_used_gb": 19.39,
+   "roles": {
+    "main": {
+     "cores": 0.15,
+     "rss_mb": 446.6,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 11.97,
+     "rss_mb": 3198.6,
+     "n": 1
+    },
+    "worker": {
+     "cores": 0.96,
+     "rss_mb": 907.5,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 34.48,
+   "sys_cpu": 93.2,
+   "sys_used_gb": 19.45,
+   "roles": {
+    "main": {
+     "cores": 0.39,
+     "rss_mb": 446.6,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 12.46,
+     "rss_mb": 3199.5,
+     "n": 1
+    },
+    "worker": {
+     "cores": 0.9,
+     "rss_mb": 988.3,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 35.01,
+   "sys_cpu": 88.1,
+   "sys_used_gb": 19.57,
+   "roles": {
+    "main": {
+     "cores": 0.18,
+     "rss_mb": 446.6,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 11.79,
+     "rss_mb": 3199.5,
+     "n": 1
+    },
+    "worker": {
+     "cores": 0.9,
+     "rss_mb": 1069.9,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 35.54,
+   "sys_cpu": 98.2,
+   "sys_used_gb": 19.29,
+   "roles": {
+    "main": {
+     "cores": 0.21,
+     "rss_mb": 446.6,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 12.65,
+     "rss_mb": 3199.9,
+     "n": 1
+    },
+    "worker": {
+     "cores": 1.04,
+     "rss_mb": 715.1,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 36.06,
+   "sys_cpu": 91.6,
+   "sys_used_gb": 19.37,
+   "roles": {
+    "main": {
+     "cores": 0.24,
+     "rss_mb": 446.6,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 11.18,
+     "rss_mb": 3201.2,
+     "n": 1
+    },
+    "worker": {
+     "cores": 1.02,
+     "rss_mb": 797.7,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 36.57,
+   "sys_cpu": 97.4,
+   "sys_used_gb": 18.86,
+   "roles": {
+    "main": {
+     "cores": 0.15,
+     "rss_mb": 446.5,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 13.15,
+     "rss_mb": 3201.2,
+     "n": 1
+    },
+    "worker": {
+     "cores": 1.42,
+     "rss_mb": 106.2,
+     "n": 2
+    }
+   }
+  },
+  {
+   "t": 37.11,
+   "sys_cpu": 91.8,
+   "sys_used_gb": 18.59,
+   "roles": {
+    "main": {
+     "cores": 0.2,
+     "rss_mb": 319.8,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 12.61,
+     "rss_mb": 3075.3,
+     "n": 1
+    }
+   }
+  },
+  {
+   "t": 37.64,
+   "sys_cpu": 96.6,
+   "sys_used_gb": 18.2,
+   "roles": {
+    "main": {
+     "cores": 0.0,
+     "rss_mb": 319.8,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 13.14,
+     "rss_mb": 2757.2,
+     "n": 1
+    }
+   }
+  },
+  {
+   "t": 38.16,
+   "sys_cpu": 80.0,
+   "sys_used_gb": 17.41,
+   "roles": {
+    "main": {
+     "cores": 0.0,
+     "rss_mb": 319.8,
+     "n": 1
+    },
+    "ffmpeg": {
+     "cores": 11.05,
+     "rss_mb": 1988.6,
+     "n": 1
+    }
+   }
+  },
+  {
+   "t": 38.67,
+   "sys_cpu": 42.9,
+   "sys_used_gb": 15.48,
+   "roles": {
+    "main": {
+     "cores": 0.15,
+     "rss_mb": 319.2,
+     "n": 1
+    },
+    "other": {
+     "cores": 0.12,
+     "rss_mb": 6.5,
+     "n": 1
+    }
+   }
+  },
+  {
+   "t": 39.18,
+   "sys_cpu": 6.1,
+   "sys_used_gb": 15.47,
+   "roles": {
+    "main": {
+     "cores": 0.15,
+     "rss_mb": 319.1,
+     "n": 1
+    }
+   }
+  }
+ ]
+}

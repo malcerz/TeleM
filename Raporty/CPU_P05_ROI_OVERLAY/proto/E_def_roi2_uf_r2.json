@@ -1,0 +1,21 @@
+{
+ "variant": "roi_each",
+ "regions": 2,
+ "region_pct": 90.62,
+ "atlas_pct": 91.05,
+ "uncovered_alpha_px": 0,
+ "graph": "[0:v]null[base];[1:v]setpts=PTS-STARTPTS,split=2[s0][s1];[s0]crop=3776:1264:0:0,scale=in_range=full:out_range=full:out_color_matrix=bt2020:flags=bicubic,format=yuva420p10le[r0];[s1]crop=3728:736:0:1264,scale=in_range=full:out_range=full:out_color_matrix=bt2020:flags=bicubic,format=yuva420p10le[r1];[base][r0]overlay=48:880:shortest=1:format=yuv420p10[o0];[o0][r1]overlay=64:0:shortest=1:format=yuv420p10[vtemp]",
+ "mode": "time",
+ "layout": "def",
+ "frame": 160,
+ "rc": 0,
+ "wall_s": 24.356,
+ "wall_fps": 12.32,
+ "steady_fps": 12.81,
+ "cores": 13.35,
+ "core_s_per_frame": 1.0839,
+ "rss_peak_mb": 3633,
+ "x265_fps": 12.51,
+ "x265_kbps": 19284.61,
+ "errors": []
+}

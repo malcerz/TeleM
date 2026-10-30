@@ -1,0 +1,21 @@
+{
+ "variant": "roi_each",
+ "regions": 5,
+ "region_pct": 47.41,
+ "atlas_pct": 61.71,
+ "uncovered_alpha_px": 0,
+ "graph": "[0:v]null[base];[1:v]setpts=PTS-STARTPTS,split=5[s0][s1][s2][s3][s4];[s0]crop=816:1168:0:0,scale=in_range=full:out_range=full:out_color_matrix=bt2020:flags=bicubic,format=yuva420p10le[r0];[s1]crop=800:800:816:0,scale=in_range=full:out_range=full:out_color_matrix=bt2020:flags=bicubic,format=yuva420p10le[r1];[s2]crop=224:688:1616:0,scale=in_range=full:out_range=full:out_color_matrix=bt2020:flags=bicubic,format=yuva420p10le[r2];[s3]crop=2416:576:0:1168,scale=in_range=full:out_range=full:out_color_matrix=bt2020:flags=bicubic,format=yuva420p10le[r3];[s4]crop=2480:320:0:1744,scale=in_range=full:out_range=full:out_color_matrix=bt2020:flags=bicubic,format=yuva420p10le[r4];[base][r0]overlay=128:928:shortest=1:format=yuv420p10[o0];[o0][r1]overlay=1520:608:shortest=1:format=yuv420p10[o1];[o1][r2]overlay=3520:688:shortest=1:format=yuv420p10[o2];[o2][r3]overlay=1040:0:shortest=1:format=yuv420p10[o3];[o3][r4]overlay=1312:1824:shortest=1:format=yuv420p10[vtemp]",
+ "mode": "time",
+ "layout": "v3",
+ "frame": 160,
+ "rc": 0,
+ "wall_s": 23.277,
+ "wall_fps": 12.89,
+ "steady_fps": 13.33,
+ "cores": 13.43,
+ "core_s_per_frame": 1.042,
+ "rss_peak_mb": 3222,
+ "x265_fps": 13.09,
+ "x265_kbps": 19538.65,
+ "errors": []
+}

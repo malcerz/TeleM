@@ -1,0 +1,18 @@
+{
+  "interval_ms": 20,
+  "samples": 190,
+  "max_gap_ms": 312.7688000022317,
+  "p95_gap_ms": 38.28559999965364,
+  "gaps_over_100ms": 4,
+  "stall_samples": [
+    {
+      "gap_ms": 250.4421999983606,
+      "stack": "  File \"C:\\_DEV\\SportCamHUD\\SportCamHUD.py\", line 53, in <module>\n    main()\n  File \"C:\\_DEV\\SportCamHUD\\src\\gui\\qt\\application.py\", line 1820, in main\n    rc = app.exec()\n",
+      "hud_building": false,
+      "project_loading": true,
+      "workers": {
+        "Thread-23 (bg_load)": "  File \"C:\\Users\\Malcerz\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\threading.py\", line 1044, in _bootstrap\n    self._bootstrap_inner()\n  File \"C:\\Users\\Malcerz\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\threading.py\", line 1082, in _bootstrap_inner\n    self._context.run(self.run)\n  File \"C:\\Users\\Malcerz\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\threading.py\", line 1024, in run\n    self._target(*self._args, **self._kwargs)\n  File \"C:\\_DEV\\SportCamHUD\\src\\gui\\qt\\_mixins\\project_mixin.py\", line 1465, in bg_load\n    fit_loaded = self.telemetry.load_fit(\n  File \"C:\\_DEV\\SportCamHUD\\src\\gui\\telemetry_manager.py\", line 1087, in load_fit\n    state = self._derive_fit_state(base)\n  File \"C:\\_DEV\\SportCamHUD\\src\\gui\\telemetry_manager.py\", line 1126, in _derive_fit_state\n    fit_result = sync_fit_to_video(records, base[\"start_dt\"])\n  File \"C:\\_DEV\\SportCamHUD\\telemetry_fit.py\", line 628, in sync_fit_to_video\n    canonical_distance = normalize_fit_recorded_distance(\n  File \"C:\\_DEV\\SportCamHUD\\src\\telemetry_resolver.py\", line 1171, in normalize_fit_recorded_distance\n    print(f\"segments={summary.segments}\", flush=True)\n"
+      }
+    }
+  ]
+}

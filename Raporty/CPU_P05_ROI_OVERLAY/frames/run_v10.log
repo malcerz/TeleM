@@ -1,0 +1,68 @@
+
+==============================================================================
+[SPORTCAMHUD EXPORT LOG SESSION START] 2026-10-30 07:30:01
+[AMD EXPORT LOG] session_start=2026-10-30 07:30:01 pid=452 job_id=- generation=1 mode=DIRECT
+[AMD EXPORT LOG] output=C:\_DEV\SportCamHUD\Raporty\CPU_P05_ROI_OVERLAY\frames\run_v10.mp4
+[AMD EXPORT LOG] log=C:\_DEV\SportCamHUD\Raporty\CPU_P05_ROI_OVERLAY\frames\run_v10.log
+==============================================================================
+[APPLICATION]
+  Application:    SportCamHUD
+  Version:        1.14 (commit 1601497)
+  Process PID:    452
+  Job ID:         -
+  Generation:     1
+  Mode:           DIRECT
+  Log File:       C:\_DEV\SportCamHUD\Raporty\CPU_P05_ROI_OVERLAY\frames\run_v10.log
+
+[HOST ENVIRONMENT]
+  Operating System: Windows 11 (Build 10.0.26300) AMD64
+  CPU:              AMD64 Family 25 Model 80 Stepping 0, AuthenticAMD
+  RAM Total:        N/A
+  GPU(s) / Driver:  N/A
+
+[EXPORT CONFIGURATION]
+  Target Backend:   CPU
+  Encoder:          cpu
+  Codec:            HEVC
+  Resolution:       source
+  Target FPS:       30.00
+  Bitrate:          16M
+  Profile / Preset: fast
+  HDR Mode:         preserve_hlg
+  VBR Config:       Default VBR
+
+[MEDIA INPUTS & OUTPUT]
+  Input Videos:     ['D:\\GoPro\\GX010370.MP4']
+  FIT File:         D:\GoPro\2026-10-13_15-02-49.fit
+  GPX File:         N/A
+  Target Output:    C:\_DEV\SportCamHUD\Raporty\CPU_P05_ROI_OVERLAY\frames\run_v10.mp4
+
+[TELEMETRY & COMPASS STATUS]
+  Hybrid Compass Enabled: YES
+  Hybrid Samples Available: N/A
+  Checkpoint Samples:
+    Point 1/5 (t=   0.0s | 2026-10-13 13:02:52 UTC): raw_heading=N/A, hybrid_heading=166.9°, cache=OK
+    Point 2/5 (t=  45.7s | 2026-10-13 13:03:38 UTC): raw_heading=N/A, hybrid_heading=74.8°, cache=OK
+    Point 3/5 (t=  91.4s | 2026-10-13 13:04:24 UTC): raw_heading=72.9° (FIT), hybrid_heading=90.5°, cache=OK
+    Point 4/5 (t= 137.0s | 2026-10-13 13:05:09 UTC): raw_heading=152.5° (FIT), hybrid_heading=145.9°, cache=OK
+    Point 5/5 (t= 182.7s | 2026-10-13 13:05:55 UTC): raw_heading=322.4° (FIT), hybrid_heading=N/A, cache=OK
+------------------------------------------------------------------------------
+[PIPELINE PROGRESS & DIAGNOSTICS]
+[STAGE] FFmpeg child spawned pid=4816 encoder=cpu
+[PROGRESS] frame=1/320 (  0.3%) fps=  1.1 elapsed=   0.9s
+[PROGRESS] frame=250/320 ( 78.1%) fps= 12.1 elapsed=  20.7s
+[PROGRESS] frame=320/320 (100.0%) fps= 12.0 elapsed=  26.7s
+
+------------------------------------------------------------------------------
+[SPORTCAMHUD EXPORT LOG SESSION END] 2026-10-30 07:30:32
+[AMD EXPORT LOG] session_end=2026-10-30 07:30:32 pid=452 status=completed
+  status=completed
+  Process PID:        452
+  Final Status:       COMPLETED
+  Detail / Error:     output=C:\_DEV\SportCamHUD\Raporty\CPU_P05_ROI_OVERLAY\frames\run_v10.mp4
+  detail=output=C:\_DEV\SportCamHUD\Raporty\CPU_P05_ROI_OVERLAY\frames\run_v10.mp4
+[AMD EXPORT LOG] detail=output=C:\_DEV\SportCamHUD\Raporty\CPU_P05_ROI_OVERLAY\frames\run_v10.mp4
+
+[PERFORMANCE METRICS & SUMMARY]
+  Frames Rendered:    N/A
+==============================================================================

@@ -1,0 +1,21 @@
+{
+ "variant": "roi_each",
+ "regions": 11,
+ "region_pct": 39.89,
+ "atlas_pct": 55.98,
+ "uncovered_alpha_px": 0,
+ "graph": "[0:v]null[base];[1:v]setpts=PTS-STARTPTS,split=11[s0][s1][s2][s3][s4][s5][s6][s7][s8][s9][s10];[s0]crop=624:880:0:0,scale=in_range=full:out_range=full:out_color_matrix=bt2020:flags=bicubic,format=yuva420p10le[r0];[s1]crop=192:704:624:0,scale=in_range=full:out_range=full:out_color_matrix=bt2020:flags=bicubic,format=yuva420p10le[r1];[s2]crop=144:704:816:0,scale=in_range=full:out_range=full:out_color_matrix=bt2020:flags=bicubic,format=yuva420p10le[r2];[s3]crop=1024:560:960:0,scale=in_range=full:out_range=full:out_color_matrix=bt2020:flags=bicubic,format=yuva420p10le[r3];[s4]crop=1008:432:1984:0,scale=in_range=full:out_range=full:out_color_matrix=bt2020:flags=bicubic,format=yuva420p10le[r4];[s5]crop=1008:432:0:880,scale=in_range=full:out_range=full:out_color_matrix=bt2020:flags=bicubic,format=yuva420p10le[r5];[s6]crop=544:432:1008:880,scale=in_range=full:out_range=full:out_color_matrix=bt2020:flags=bicubic,format=yuva420p10le[r6];[s7]crop=368:384:1552:880,scale=in_range=full:out_range=full:out_color_matrix=bt2020:flags=bicubic,format=yuva420p10le[r7];[s8]crop=224:288:1920:880,scale=in_range=full:out_range=full:out_color_matrix=bt2020:flags=bicubic,format=yuva420p10le[r8];[s9]crop=240:272:2144:880,scale=in_range=full:out_range=full:out_color_matrix=bt2020:flags=bicubic,format=yuva420p10le[r9];[s10]crop=2384:240:0:1312,scale=in_range=full:out_range=full:out_color_matrix=bt2020:flags=bicubic,format=yuva420p10le[r10];[base][r0]overlay=3200:1248:shortest=1:format=yuv420p10[o0];[o0][r1]overlay=64:16:shortest=1:format=yuv420p10[o1];[o1][r2]overlay=3648:32:shortest=1:format=yuv420p10[o2];[o2][r3]overlay=1408:0:shortest=1:format=yuv420p10[o3];[o3][r4]overlay=304:16:shortest=1:format=yuv420p10[o4];[o4][r5]overlay=2560:16:shortest=1:format=yuv420p10[o5];[o5][r6]overlay=48:1712:shortest=1:format=yuv420p10[o6];[o6][r7]overlay=64:1296:shortest=1:format=yuv420p10[o7];[o7][r8]overlay=96:880:shortest=1:format=yuv420p10[o8];[o8][r9]overlay=3584:944:shortest=1:format=yuv420p10[o9];[o9][r10]overlay=736:1872:shortest=1:format=yuv420p10[vtemp]",
+ "mode": "time",
+ "layout": "def",
+ "frame": 160,
+ "rc": 0,
+ "wall_s": 25.21,
+ "wall_fps": 11.9,
+ "steady_fps": 12.4,
+ "cores": 13.36,
+ "core_s_per_frame": 1.1227,
+ "rss_peak_mb": 3509,
+ "x265_fps": 12.1,
+ "x265_kbps": 19284.61,
+ "errors": []
+}

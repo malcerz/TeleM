@@ -1,0 +1,9 @@
+{
+ "variant": "full",
+ "mode": "parity",
+ "layout": "def",
+ "frame": 160,
+ "rc": 0,
+ "wall_s": 0.546,
+ "errors": []
+}
