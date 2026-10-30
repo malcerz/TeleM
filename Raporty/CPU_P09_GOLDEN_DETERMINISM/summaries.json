@@ -1,0 +1,1450 @@
+{
+  "checked_s900_w1": {
+    "tag": "checked_s900_w1",
+    "env": [
+      "P07A_DIAG_DIR=C:\\GoPro\\TO\\p09\\checked_s900_w1",
+      "P09_START=900",
+      "P09_CAPTURE_FRAME=0",
+      "TELEM_CPU_DIAG_DUMP_DIR=C:\\GoPro\\TO\\p09\\checked_s900_w1",
+      "TELEM_CPU_WORKERS=1"
+    ],
+    "extra": "--profile fast --bitrate 16M --golden-dir C:\\GoPro\\TO\\p09\\checked_s900_w1 --golden-frame 0 --golden-ready-timeout 60",
+    "frames": 30,
+    "start_frame": 900,
+    "returncode": 0,
+    "process_wall_s": 20.13,
+    "sys_used_gb_before": 9.37,
+    "sys_used_gb_peak": 12.37,
+    "window_s": [
+      5.08,
+      17.92
+    ],
+    "sys_cpu_pct_window": 47.4,
+    "cores_window": {
+      "worker": 0.03,
+      "main": 0.91,
+      "other": 0.16,
+      "ffmpeg": 3.33
+    },
+    "rss_peak_mb": {
+      "worker": 75.7,
+      "main": 608.7,
+      "other": 77.6,
+      "ffmpeg": 2493.3
+    },
+    "n_procs_peak": {
+      "worker": 1,
+      "main": 1,
+      "other": 1,
+      "ffmpeg": 1
+    },
+    "bench_line": "[BENCH RESULT] mode=direct success=True frames=30 elapsed=9.2s fps=3.3",
+    "harness": {
+      "success": true,
+      "error": "",
+      "elapsed_s": 9.2,
+      "total_frames": 30,
+      "effective_fps": 3.26,
+      "project_load_until_click_s": 3.604491900005087
+    },
+    "stream": {
+      "stream_wall_s": 8.923807299994223,
+      "first_piped_frame_s": 0.1706376999936765,
+      "pipe_first_to_last_s": 7.040730100001383,
+      "pipe_steady_fps": 4.024955987104267,
+      "pipe_steady_window_frames": [
+        4,
+        27
+      ],
+      "ffmpeg_drain_and_finalize_s": 1.712399700001697,
+      "frames_written": 30,
+      "workers": null,
+      "shm_slots": null
+    },
+    "x265_rc": "Rate Control / qCompress            : ABR-16000 kbps / 0.60",
+    "x265": {
+      "frames": 30,
+      "s": 8.34,
+      "fps": 3.59,
+      "kbps": 20211.09
+    },
+    "validation": {
+      "valid": true,
+      "actual_video_frames": 30,
+      "av": {
+        "duration": 1.001,
+        "has_video": true,
+        "has_audio": true,
+        "streams_count": 2,
+        "size_bytes": 2565844,
+        "timing_error": null
+      },
+      "color_valid": true
+    },
+    "output_bytes": 2565844
+  },
+  "checked_s900_w2": {
+    "tag": "checked_s900_w2",
+    "env": [
+      "P07A_DIAG_DIR=C:\\GoPro\\TO\\p09\\checked_s900_w2",
+      "P09_START=900",
+      "P09_CAPTURE_FRAME=15",
+      "TELEM_CPU_DIAG_DUMP_DIR=C:\\GoPro\\TO\\p09\\checked_s900_w2",
+      "TELEM_CPU_WORKERS=2"
+    ],
+    "extra": "--profile fast --bitrate 16M --golden-dir C:\\GoPro\\TO\\p09\\checked_s900_w2 --golden-frame 15 --golden-ready-timeout 60",
+    "frames": 30,
+    "start_frame": 900,
+    "returncode": 0,
+    "process_wall_s": 21.44,
+    "sys_used_gb_before": 9.37,
+    "sys_used_gb_peak": 12.82,
+    "window_s": [
+      5.62,
+      18.51
+    ],
+    "sys_cpu_pct_window": 46.9,
+    "cores_window": {
+      "ffmpeg": 2.99,
+      "other": 0.17,
+      "worker": 0.58,
+      "main": 0.44
+    },
+    "rss_peak_mb": {
+      "ffmpeg": 2680.8,
+      "other": 78.0,
+      "worker": 544.4,
+      "main": 542.8
+    },
+    "n_procs_peak": {
+      "ffmpeg": 1,
+      "other": 1,
+      "worker": 2,
+      "main": 1
+    },
+    "bench_line": "[BENCH RESULT] mode=direct success=True frames=30 elapsed=8.7s fps=3.4",
+    "harness": {
+      "success": true,
+      "error": "",
+      "elapsed_s": 8.72,
+      "total_frames": 30,
+      "effective_fps": 3.44,
+      "project_load_until_click_s": 3.486518400000932
+    },
+    "stream": {
+      "stream_wall_s": 8.466801299997314,
+      "first_piped_frame_s": 1.2226063999987673,
+      "pipe_first_to_last_s": 3.667292800004361,
+      "pipe_steady_fps": 7.80221136380045,
+      "pipe_steady_window_frames": [
+        4,
+        27
+      ],
+      "ffmpeg_drain_and_finalize_s": 3.4060958999980357,
+      "frames_written": 30,
+      "workers": null,
+      "shm_slots": null
+    },
+    "x265_rc": "Rate Control / qCompress            : ABR-16000 kbps / 0.60",
+    "x265": {
+      "frames": 30,
+      "s": 6.82,
+      "fps": 4.4,
+      "kbps": 20211.09
+    },
+    "validation": {
+      "valid": true,
+      "actual_video_frames": 30,
+      "av": {
+        "duration": 1.001,
+        "has_video": true,
+        "has_audio": true,
+        "streams_count": 2,
+        "size_bytes": 2565844,
+        "timing_error": null
+      },
+      "color_valid": true
+    },
+    "output_bytes": 2565844
+  },
+  "checked_s900_w4": {
+    "tag": "checked_s900_w4",
+    "env": [
+      "P07A_DIAG_DIR=C:\\GoPro\\TO\\p09\\checked_s900_w4",
+      "P09_START=900",
+      "P09_CAPTURE_FRAME=29",
+      "TELEM_CPU_DIAG_DUMP_DIR=C:\\GoPro\\TO\\p09\\checked_s900_w4",
+      "TELEM_CPU_WORKERS=4"
+    ],
+    "extra": "--profile fast --bitrate 16M --golden-dir C:\\GoPro\\TO\\p09\\checked_s900_w4 --golden-frame 29 --golden-ready-timeout 60",
+    "frames": 30,
+    "start_frame": 900,
+    "returncode": 0,
+    "process_wall_s": 20.19,
+    "sys_used_gb_before": 9.4,
+    "sys_used_gb_peak": 13.08,
+    "window_s": [
+      5.07,
+      18.06
+    ],
+    "sys_cpu_pct_window": 49.8,
+    "cores_window": {
+      "other": 0.16,
+      "worker": 0.88,
+      "main": 0.42,
+      "ffmpeg": 3.55
+    },
+    "rss_peak_mb": {
+      "other": 77.9,
+      "worker": 1353.1,
+      "main": 670.6,
+      "ffmpeg": 2698.9
+    },
+    "n_procs_peak": {
+      "other": 1,
+      "worker": 4,
+      "main": 1,
+      "ffmpeg": 1
+    },
+    "bench_line": "[BENCH RESULT] mode=direct success=True frames=30 elapsed=9.3s fps=3.2",
+    "harness": {
+      "success": true,
+      "error": "",
+      "elapsed_s": 9.34,
+      "total_frames": 30,
+      "effective_fps": 3.21,
+      "project_load_until_click_s": 3.4821618999994826
+    },
+    "stream": {
+      "stream_wall_s": 9.09041189999698,
+      "first_piped_frame_s": 1.700194899996859,
+      "pipe_first_to_last_s": 3.6250618000049144,
+      "pipe_steady_fps": 8.31760462244031,
+      "pipe_steady_window_frames": [
+        4,
+        27
+      ],
+      "ffmpeg_drain_and_finalize_s": 3.847013500002504,
+      "frames_written": 30,
+      "workers": null,
+      "shm_slots": null
+    },
+    "x265_rc": "Rate Control / qCompress            : ABR-16000 kbps / 0.60",
+    "x265": {
+      "frames": 30,
+      "s": 6.83,
+      "fps": 4.39,
+      "kbps": 20211.09
+    },
+    "validation": {
+      "valid": true,
+      "actual_video_frames": 30,
+      "av": {
+        "duration": 1.001,
+        "has_video": true,
+        "has_audio": true,
+        "streams_count": 2,
+        "size_bytes": 2565844,
+        "timing_error": null
+      },
+      "color_valid": true
+    },
+    "output_bytes": 2565844
+  },
+  "checked_s1800_w1": {
+    "tag": "checked_s1800_w1",
+    "env": [
+      "P07A_DIAG_DIR=C:\\GoPro\\TO\\p09\\checked_s1800_w1",
+      "P09_START=1800",
+      "P09_CAPTURE_FRAME=0",
+      "TELEM_CPU_DIAG_DUMP_DIR=C:\\GoPro\\TO\\p09\\checked_s1800_w1",
+      "TELEM_CPU_WORKERS=1"
+    ],
+    "extra": "--profile fast --bitrate 16M --golden-dir C:\\GoPro\\TO\\p09\\checked_s1800_w1 --golden-frame 0 --golden-ready-timeout 60",
+    "frames": 30,
+    "start_frame": 1800,
+    "returncode": 0,
+    "process_wall_s": 20.26,
+    "sys_used_gb_before": 9.37,
+    "sys_used_gb_peak": 12.35,
+    "window_s": [
+      5.08,
+      17.87
+    ],
+    "sys_cpu_pct_window": 40.6,
+    "cores_window": {
+      "main": 0.86,
+      "other": 0.17,
+      "worker": 0.02,
+      "ffmpeg": 2.84
+    },
+    "rss_peak_mb": {
+      "main": 541.1,
+      "other": 78.9,
+      "worker": 66.5,
+      "ffmpeg": 2466.2
+    },
+    "n_procs_peak": {
+      "main": 1,
+      "other": 2,
+      "worker": 1,
+      "ffmpeg": 1
+    },
+    "bench_line": "[BENCH RESULT] mode=direct success=True frames=30 elapsed=9.1s fps=3.3",
+    "harness": {
+      "success": true,
+      "error": "",
+      "elapsed_s": 9.11,
+      "total_frames": 30,
+      "effective_fps": 3.29,
+      "project_load_until_click_s": 3.4602541999993264
+    },
+    "stream": {
+      "stream_wall_s": 8.867684000004374,
+      "first_piped_frame_s": 0.19154659999912838,
+      "pipe_first_to_last_s": 7.155062000005273,
+      "pipe_steady_fps": 4.103524061860385,
+      "pipe_steady_window_frames": [
+        4,
+        27
+      ],
+      "ffmpeg_drain_and_finalize_s": 1.520381800000905,
+      "frames_written": 30,
+      "workers": null,
+      "shm_slots": null
+    },
+    "x265_rc": "Rate Control / qCompress            : ABR-16000 kbps / 0.60",
+    "x265": {
+      "frames": 30,
+      "s": 8.29,
+      "fps": 3.62,
+      "kbps": 19272.34
+    },
+    "validation": {
+      "valid": true,
+      "actual_video_frames": 30,
+      "av": {
+        "duration": 1.001,
+        "has_video": true,
+        "has_audio": true,
+        "streams_count": 2,
+        "size_bytes": 2448246,
+        "timing_error": null
+      },
+      "color_valid": true
+    },
+    "output_bytes": 2448246
+  },
+  "checked_s1800_w2": {
+    "tag": "checked_s1800_w2",
+    "env": [
+      "P07A_DIAG_DIR=C:\\GoPro\\TO\\p09\\checked_s1800_w2",
+      "P09_START=1800",
+      "P09_CAPTURE_FRAME=15",
+      "TELEM_CPU_DIAG_DUMP_DIR=C:\\GoPro\\TO\\p09\\checked_s1800_w2",
+      "TELEM_CPU_WORKERS=2"
+    ],
+    "extra": "--profile fast --bitrate 16M --golden-dir C:\\GoPro\\TO\\p09\\checked_s1800_w2 --golden-frame 15 --golden-ready-timeout 60",
+    "frames": 30,
+    "start_frame": 1800,
+    "returncode": 0,
+    "process_wall_s": 19.54,
+    "sys_used_gb_before": 9.4,
+    "sys_used_gb_peak": 12.77,
+    "window_s": [
+      5.08,
+      17.46
+    ],
+    "sys_cpu_pct_window": 49.9,
+    "cores_window": {
+      "ffmpeg": 3.68,
+      "main": 0.5,
+      "other": 0.18,
+      "worker": 0.67
+    },
+    "rss_peak_mb": {
+      "ffmpeg": 2675.4,
+      "main": 542.7,
+      "other": 73.0,
+      "worker": 482.0
+    },
+    "n_procs_peak": {
+      "ffmpeg": 1,
+      "main": 1,
+      "other": 1,
+      "worker": 2
+    },
+    "bench_line": "[BENCH RESULT] mode=direct success=True frames=30 elapsed=8.6s fps=3.5",
+    "harness": {
+      "success": true,
+      "error": "",
+      "elapsed_s": 8.56,
+      "total_frames": 30,
+      "effective_fps": 3.5,
+      "project_load_until_click_s": 3.484711699995387
+    },
+    "stream": {
+      "stream_wall_s": 8.290027700000792,
+      "first_piped_frame_s": 1.259039099997608,
+      "pipe_first_to_last_s": 3.6665391999995336,
+      "pipe_steady_fps": 7.810005520325631,
+      "pipe_steady_window_frames": [
+        4,
+        27
+      ],
+      "ffmpeg_drain_and_finalize_s": 3.1880155999970157,
+      "frames_written": 30,
+      "workers": null,
+      "shm_slots": null
+    },
+    "x265_rc": "Rate Control / qCompress            : ABR-16000 kbps / 0.60",
+    "x265": {
+      "frames": 30,
+      "s": 6.63,
+      "fps": 4.52,
+      "kbps": 19272.34
+    },
+    "validation": {
+      "valid": true,
+      "actual_video_frames": 30,
+      "av": {
+        "duration": 1.001,
+        "has_video": true,
+        "has_audio": true,
+        "streams_count": 2,
+        "size_bytes": 2448246,
+        "timing_error": null
+      },
+      "color_valid": true
+    },
+    "output_bytes": 2448246
+  },
+  "checked_s1800_w4": {
+    "tag": "checked_s1800_w4",
+    "env": [
+      "P07A_DIAG_DIR=C:\\GoPro\\TO\\p09\\checked_s1800_w4",
+      "P09_START=1800",
+      "P09_CAPTURE_FRAME=29",
+      "TELEM_CPU_DIAG_DUMP_DIR=C:\\GoPro\\TO\\p09\\checked_s1800_w4",
+      "TELEM_CPU_WORKERS=4"
+    ],
+    "extra": "--profile fast --bitrate 16M --golden-dir C:\\GoPro\\TO\\p09\\checked_s1800_w4 --golden-frame 29 --golden-ready-timeout 60",
+    "frames": 30,
+    "start_frame": 1800,
+    "returncode": 0,
+    "process_wall_s": 20.28,
+    "sys_used_gb_before": 9.39,
+    "sys_used_gb_peak": 12.64,
+    "window_s": [
+      5.09,
+      18.05
+    ],
+    "sys_cpu_pct_window": 46.9,
+    "cores_window": {
+      "other": 0.18,
+      "ffmpeg": 3.34,
+      "worker": 0.88,
+      "main": 0.43
+    },
+    "rss_peak_mb": {
+      "other": 78.1,
+      "ffmpeg": 2678.5,
+      "worker": 998.5,
+      "main": 669.0
+    },
+    "n_procs_peak": {
+      "other": 2,
+      "ffmpeg": 1,
+      "worker": 4,
+      "main": 1
+    },
+    "bench_line": "[BENCH RESULT] mode=direct success=True frames=30 elapsed=9.1s fps=3.3",
+    "harness": {
+      "success": true,
+      "error": "",
+      "elapsed_s": 9.12,
+      "total_frames": 30,
+      "effective_fps": 3.29,
+      "project_load_until_click_s": 3.405178100001649
+    },
+    "stream": {
+      "stream_wall_s": 8.85889579999639,
+      "first_piped_frame_s": 1.8245045999938156,
+      "pipe_first_to_last_s": 3.4701275000043097,
+      "pipe_steady_fps": 8.53093798442022,
+      "pipe_steady_window_frames": [
+        4,
+        27
+      ],
+      "ffmpeg_drain_and_finalize_s": 4.467399799999839,
+      "frames_written": 30,
+      "workers": null,
+      "shm_slots": null
+    },
+    "x265_rc": "Rate Control / qCompress            : ABR-16000 kbps / 0.60",
+    "x265": {
+      "frames": 30,
+      "s": 6.52,
+      "fps": 4.6,
+      "kbps": 19272.34
+    },
+    "validation": {
+      "valid": true,
+      "actual_video_frames": 30,
+      "av": {
+        "duration": 1.001,
+        "has_video": true,
+        "has_audio": true,
+        "streams_count": 2,
+        "size_bytes": 2448246,
+        "timing_error": null
+      },
+      "color_valid": true
+    },
+    "output_bytes": 2448246
+  },
+  "checked_rot0_f0": {
+    "tag": "checked_rot0_f0",
+    "env": [
+      "P07A_DIAG_DIR=C:\\GoPro\\TO\\p09\\checked_rot0_f0",
+      "P09_START=900",
+      "P09_CAPTURE_FRAME=0",
+      "TELEM_CPU_DIAG_DUMP_DIR=C:\\GoPro\\TO\\p09\\checked_rot0_f0",
+      "TELEM_CPU_WORKERS=2"
+    ],
+    "extra": "--profile fast --bitrate 16M --golden-dir C:\\GoPro\\TO\\p09\\checked_rot0_f0 --golden-frame 0 --golden-ready-timeout 60",
+    "frames": 30,
+    "start_frame": 900,
+    "returncode": 0,
+    "process_wall_s": 19.85,
+    "sys_used_gb_before": 9.37,
+    "sys_used_gb_peak": 12.72,
+    "window_s": [
+      5.07,
+      17.44
+    ],
+    "sys_cpu_pct_window": 45.2,
+    "cores_window": {
+      "ffmpeg": 3.38,
+      "main": 0.46,
+      "other": 0.17,
+      "worker": 0.66
+    },
+    "rss_peak_mb": {
+      "ffmpeg": 2708.2,
+      "main": 545.2,
+      "other": 74.9,
+      "worker": 533.9
+    },
+    "n_procs_peak": {
+      "ffmpeg": 1,
+      "main": 1,
+      "other": 2,
+      "worker": 2
+    },
+    "bench_line": "[BENCH RESULT] mode=direct success=True frames=30 elapsed=8.7s fps=3.5",
+    "harness": {
+      "success": true,
+      "error": "",
+      "elapsed_s": 8.66,
+      "total_frames": 30,
+      "effective_fps": 3.46,
+      "project_load_until_click_s": 3.848998700006632
+    },
+    "stream": {
+      "stream_wall_s": 8.342546899999434,
+      "first_piped_frame_s": 1.224929299998621,
+      "pipe_first_to_last_s": 3.6774180000065826,
+      "pipe_steady_fps": 7.598032624889844,
+      "pipe_steady_window_frames": [
+        4,
+        27
+      ],
+      "ffmpeg_drain_and_finalize_s": 3.6041329999934533,
+      "frames_written": 30,
+      "workers": null,
+      "shm_slots": null
+    },
+    "x265_rc": "Rate Control / qCompress            : ABR-16000 kbps / 0.60",
+    "x265": {
+      "frames": 30,
+      "s": 6.72,
+      "fps": 4.46,
+      "kbps": 19953.14
+    },
+    "validation": {
+      "valid": true,
+      "actual_video_frames": 30,
+      "av": {
+        "duration": 1.001,
+        "has_video": true,
+        "has_audio": true,
+        "streams_count": 2,
+        "size_bytes": 2533569,
+        "timing_error": null
+      },
+      "color_valid": true
+    },
+    "output_bytes": 2533569
+  },
+  "checked_rot0_f15": {
+    "tag": "checked_rot0_f15",
+    "env": [
+      "P07A_DIAG_DIR=C:\\GoPro\\TO\\p09\\checked_rot0_f15",
+      "P09_START=900",
+      "P09_CAPTURE_FRAME=15",
+      "TELEM_CPU_DIAG_DUMP_DIR=C:\\GoPro\\TO\\p09\\checked_rot0_f15",
+      "TELEM_CPU_WORKERS=2"
+    ],
+    "extra": "--profile fast --bitrate 16M --golden-dir C:\\GoPro\\TO\\p09\\checked_rot0_f15 --golden-frame 15 --golden-ready-timeout 60",
+    "frames": 30,
+    "start_frame": 900,
+    "returncode": 0,
+    "process_wall_s": 20.0,
+    "sys_used_gb_before": 9.38,
+    "sys_used_gb_peak": 12.7,
+    "window_s": [
+      5.08,
+      17.91
+    ],
+    "sys_cpu_pct_window": 47.2,
+    "cores_window": {
+      "main": 0.43,
+      "other": 0.18,
+      "ffmpeg": 3.55,
+      "worker": 0.63
+    },
+    "rss_peak_mb": {
+      "main": 541.3,
+      "other": 79.4,
+      "ffmpeg": 2725.0,
+      "worker": 657.6
+    },
+    "n_procs_peak": {
+      "main": 1,
+      "other": 1,
+      "ffmpeg": 1,
+      "worker": 2
+    },
+    "bench_line": "[BENCH RESULT] mode=direct success=True frames=30 elapsed=8.7s fps=3.5",
+    "harness": {
+      "success": true,
+      "error": "",
+      "elapsed_s": 8.67,
+      "total_frames": 30,
+      "effective_fps": 3.46,
+      "project_load_until_click_s": 3.5593346999958158
+    },
+    "stream": {
+      "stream_wall_s": 8.325737300001492,
+      "first_piped_frame_s": 1.1951923000015086,
+      "pipe_first_to_last_s": 3.572098399999959,
+      "pipe_steady_fps": 8.008971161977625,
+      "pipe_steady_window_frames": [
+        4,
+        27
+      ],
+      "ffmpeg_drain_and_finalize_s": 3.4001505999985966,
+      "frames_written": 30,
+      "workers": null,
+      "shm_slots": null
+    },
+    "x265_rc": "Rate Control / qCompress            : ABR-16000 kbps / 0.60",
+    "x265": {
+      "frames": 30,
+      "s": 6.69,
+      "fps": 4.48,
+      "kbps": 19953.14
+    },
+    "validation": {
+      "valid": true,
+      "actual_video_frames": 30,
+      "av": {
+        "duration": 1.001,
+        "has_video": true,
+        "has_audio": true,
+        "streams_count": 2,
+        "size_bytes": 2533569,
+        "timing_error": null
+      },
+      "color_valid": true
+    },
+    "output_bytes": 2533569
+  },
+  "checked_rot0_f29": {
+    "tag": "checked_rot0_f29",
+    "env": [
+      "P07A_DIAG_DIR=C:\\GoPro\\TO\\p09\\checked_rot0_f29",
+      "P09_START=900",
+      "P09_CAPTURE_FRAME=29",
+      "TELEM_CPU_DIAG_DUMP_DIR=C:\\GoPro\\TO\\p09\\checked_rot0_f29",
+      "TELEM_CPU_WORKERS=2"
+    ],
+    "extra": "--profile fast --bitrate 16M --golden-dir C:\\GoPro\\TO\\p09\\checked_rot0_f29 --golden-frame 29 --golden-ready-timeout 60",
+    "frames": 30,
+    "start_frame": 900,
+    "returncode": 0,
+    "process_wall_s": 19.72,
+    "sys_used_gb_before": 9.39,
+    "sys_used_gb_peak": 12.86,
+    "window_s": [
+      5.07,
+      17.4
+    ],
+    "sys_cpu_pct_window": 48.5,
+    "cores_window": {
+      "worker": 0.7,
+      "ffmpeg": 3.58,
+      "main": 0.49,
+      "other": 0.17
+    },
+    "rss_peak_mb": {
+      "worker": 669.5,
+      "ffmpeg": 2681.4,
+      "main": 543.1,
+      "other": 75.2
+    },
+    "n_procs_peak": {
+      "worker": 2,
+      "ffmpeg": 1,
+      "main": 1,
+      "other": 1
+    },
+    "bench_line": "[BENCH RESULT] mode=direct success=True frames=30 elapsed=8.8s fps=3.4",
+    "harness": {
+      "success": true,
+      "error": "",
+      "elapsed_s": 8.8,
+      "total_frames": 30,
+      "effective_fps": 3.41,
+      "project_load_until_click_s": 3.5620034000021406
+    },
+    "stream": {
+      "stream_wall_s": 8.467220499995165,
+      "first_piped_frame_s": 1.2078029999975115,
+      "pipe_first_to_last_s": 3.745633899998211,
+      "pipe_steady_fps": 7.738126719283212,
+      "pipe_steady_window_frames": [
+        4,
+        27
+      ],
+      "ffmpeg_drain_and_finalize_s": 3.394843200003379,
+      "frames_written": 30,
+      "workers": null,
+      "shm_slots": null
+    },
+    "x265_rc": "Rate Control / qCompress            : ABR-16000 kbps / 0.60",
+    "x265": {
+      "frames": 30,
+      "s": 6.81,
+      "fps": 4.4,
+      "kbps": 19953.14
+    },
+    "validation": {
+      "valid": true,
+      "actual_video_frames": 30,
+      "av": {
+        "duration": 1.001,
+        "has_video": true,
+        "has_audio": true,
+        "streams_count": 2,
+        "size_bytes": 2533569,
+        "timing_error": null
+      },
+      "color_valid": true
+    },
+    "output_bytes": 2533569
+  },
+  "perf_before1": {
+    "tag": "perf_before1",
+    "env": [
+      "TELEM_CPU_WORKERS=2"
+    ],
+    "extra": "--profile fast --bitrate 16M",
+    "frames": 150,
+    "start_frame": 900,
+    "returncode": 0,
+    "process_wall_s": 36.8,
+    "sys_used_gb_before": 9.67,
+    "sys_used_gb_peak": 13.8,
+    "window_s": [
+      9.11,
+      32.43
+    ],
+    "sys_cpu_pct_window": 92.9,
+    "cores_window": {
+      "worker": 1.29,
+      "other": 0.0,
+      "ffmpeg": 8.48,
+      "main": 0.2
+    },
+    "rss_peak_mb": {
+      "worker": 980.5,
+      "other": 77.9,
+      "ffmpeg": 3026.0,
+      "main": 458.9
+    },
+    "n_procs_peak": {
+      "worker": 2,
+      "other": 1,
+      "ffmpeg": 1,
+      "main": 1
+    },
+    "bench_line": "[BENCH RESULT] mode=direct success=True frames=150 elapsed=26.9s fps=5.6",
+    "harness": {
+      "success": true,
+      "error": "",
+      "elapsed_s": 26.86,
+      "total_frames": 150,
+      "effective_fps": 5.58,
+      "project_load_until_click_s": 3.8302372000034666
+    },
+    "stream": {
+      "stream_wall_s": 26.616381799998635,
+      "first_piped_frame_s": 0.8249985000002198,
+      "pipe_first_to_last_s": 22.772425499999372,
+      "pipe_steady_fps": 6.308846494642009,
+      "pipe_steady_window_frames": [
+        16,
+        135
+      ],
+      "ffmpeg_drain_and_finalize_s": 3.457610099998419,
+      "frames_written": 150,
+      "workers": null,
+      "shm_slots": null
+    },
+    "x265_rc": "Rate Control / qCompress            : ABR-16000 kbps / 0.60",
+    "x265": {
+      "frames": 150,
+      "s": 25.46,
+      "fps": 5.89,
+      "kbps": 15820.46
+    },
+    "validation": {
+      "valid": true,
+      "actual_video_frames": 150,
+      "av": {
+        "duration": 5.005,
+        "has_video": true,
+        "has_audio": true,
+        "streams_count": 2,
+        "size_bytes": 10066636,
+        "timing_error": null
+      },
+      "color_valid": true
+    },
+    "output_bytes": 10066636
+  },
+  "perf_before2": {
+    "tag": "perf_before2",
+    "env": [
+      "TELEM_CPU_WORKERS=2"
+    ],
+    "extra": "--profile fast --bitrate 16M",
+    "frames": 150,
+    "start_frame": 900,
+    "returncode": 0,
+    "process_wall_s": 36.96,
+    "sys_used_gb_before": 9.32,
+    "sys_used_gb_peak": 13.41,
+    "window_s": [
+      9.12,
+      32.43
+    ],
+    "sys_cpu_pct_window": 90.9,
+    "cores_window": {
+      "main": 0.21,
+      "worker": 1.37,
+      "other": 0.0,
+      "ffmpeg": 8.66
+    },
+    "rss_peak_mb": {
+      "main": 458.5,
+      "worker": 983.7,
+      "other": 75.2,
+      "ffmpeg": 3011.9
+    },
+    "n_procs_peak": {
+      "main": 1,
+      "worker": 2,
+      "other": 2,
+      "ffmpeg": 1
+    },
+    "bench_line": "[BENCH RESULT] mode=direct success=True frames=150 elapsed=26.6s fps=5.6",
+    "harness": {
+      "success": true,
+      "error": "",
+      "elapsed_s": 26.62,
+      "total_frames": 150,
+      "effective_fps": 5.63,
+      "project_load_until_click_s": 3.9181217000004835
+    },
+    "stream": {
+      "stream_wall_s": 26.38196169999719,
+      "first_piped_frame_s": 0.9703748000029009,
+      "pipe_first_to_last_s": 22.458911599998828,
+      "pipe_steady_fps": 6.559397766587476,
+      "pipe_steady_window_frames": [
+        16,
+        135
+      ],
+      "ffmpeg_drain_and_finalize_s": 3.4749109000040335,
+      "frames_written": 150,
+      "workers": null,
+      "shm_slots": null
+    },
+    "x265_rc": "Rate Control / qCompress            : ABR-16000 kbps / 0.60",
+    "x265": {
+      "frames": 150,
+      "s": 25.05,
+      "fps": 5.99,
+      "kbps": 15820.46
+    },
+    "validation": {
+      "valid": true,
+      "actual_video_frames": 150,
+      "av": {
+        "duration": 5.005,
+        "has_video": true,
+        "has_audio": true,
+        "streams_count": 2,
+        "size_bytes": 10066636,
+        "timing_error": null
+      },
+      "color_valid": true
+    },
+    "output_bytes": 10066636
+  },
+  "perf_after1": {
+    "tag": "perf_after1",
+    "env": [
+      "TELEM_CPU_WORKERS=2"
+    ],
+    "extra": "--profile fast --bitrate 16M",
+    "frames": 150,
+    "start_frame": 900,
+    "returncode": 0,
+    "process_wall_s": 37.37,
+    "sys_used_gb_before": 9.31,
+    "sys_used_gb_peak": 13.43,
+    "window_s": [
+      9.65,
+      33.08
+    ],
+    "sys_cpu_pct_window": 92.4,
+    "cores_window": {
+      "worker": 1.38,
+      "main": 0.24,
+      "other": 0.0,
+      "ffmpeg": 8.73
+    },
+    "rss_peak_mb": {
+      "worker": 981.1,
+      "main": 457.2,
+      "other": 65.8,
+      "ffmpeg": 3010.7
+    },
+    "n_procs_peak": {
+      "worker": 2,
+      "main": 1,
+      "other": 1,
+      "ffmpeg": 1
+    },
+    "bench_line": "[BENCH RESULT] mode=direct success=True frames=150 elapsed=26.8s fps=5.6",
+    "harness": {
+      "success": true,
+      "error": "",
+      "elapsed_s": 26.82,
+      "total_frames": 150,
+      "effective_fps": 5.59,
+      "project_load_until_click_s": 4.016346900003555
+    },
+    "stream": {
+      "stream_wall_s": 26.579105799995887,
+      "first_piped_frame_s": 1.0177503999948385,
+      "pipe_first_to_last_s": 22.57260690000112,
+      "pipe_steady_fps": 6.518786729768003,
+      "pipe_steady_window_frames": [
+        16,
+        135
+      ],
+      "ffmpeg_drain_and_finalize_s": 3.3723733000006177,
+      "frames_written": 150,
+      "workers": null,
+      "shm_slots": null
+    },
+    "x265_rc": "Rate Control / qCompress            : ABR-16000 kbps / 0.60",
+    "x265": {
+      "frames": 150,
+      "s": 25.2,
+      "fps": 5.95,
+      "kbps": 15820.46
+    },
+    "validation": {
+      "valid": true,
+      "actual_video_frames": 150,
+      "av": {
+        "duration": 5.005,
+        "has_video": true,
+        "has_audio": true,
+        "streams_count": 2,
+        "size_bytes": 10066636,
+        "timing_error": null
+      },
+      "color_valid": true
+    },
+    "output_bytes": 10066636
+  },
+  "perf_after2": {
+    "tag": "perf_after2",
+    "env": [
+      "TELEM_CPU_WORKERS=2"
+    ],
+    "extra": "--profile fast --bitrate 16M",
+    "frames": 150,
+    "start_frame": 900,
+    "returncode": 0,
+    "process_wall_s": 45.2,
+    "sys_used_gb_before": 9.33,
+    "sys_used_gb_peak": 13.39,
+    "window_s": [
+      11.15,
+      40.36
+    ],
+    "sys_cpu_pct_window": 84.7,
+    "cores_window": {
+      "other": 0.0,
+      "worker": 1.23,
+      "ffmpeg": 7.87,
+      "main": 0.21
+    },
+    "rss_peak_mb": {
+      "other": 72.4,
+      "worker": 986.2,
+      "ffmpeg": 3002.6,
+      "main": 457.7
+    },
+    "n_procs_peak": {
+      "other": 1,
+      "worker": 2,
+      "ffmpeg": 1,
+      "main": 1
+    },
+    "bench_line": "[BENCH RESULT] mode=direct success=True frames=150 elapsed=34.5s fps=4.3",
+    "harness": {
+      "success": true,
+      "error": "",
+      "elapsed_s": 34.51,
+      "total_frames": 150,
+      "effective_fps": 4.35,
+      "project_load_until_click_s": 4.220566700001655
+    },
+    "stream": {
+      "stream_wall_s": 34.2561485000042,
+      "first_piped_frame_s": 1.1374522000041907,
+      "pipe_first_to_last_s": 28.602157199995418,
+      "pipe_steady_fps": 4.974085869499504,
+      "pipe_steady_window_frames": [
+        16,
+        135
+      ],
+      "ffmpeg_drain_and_finalize_s": 4.281758600001922,
+      "frames_written": 150,
+      "workers": null,
+      "shm_slots": null
+    },
+    "x265_rc": "Rate Control / qCompress            : ABR-16000 kbps / 0.60",
+    "x265": {
+      "frames": 150,
+      "s": 32.68,
+      "fps": 4.59,
+      "kbps": 15820.46
+    },
+    "validation": {
+      "valid": true,
+      "actual_video_frames": 150,
+      "av": {
+        "duration": 5.005,
+        "has_video": true,
+        "has_audio": true,
+        "streams_count": 2,
+        "size_bytes": 10066636,
+        "timing_error": null
+      },
+      "color_valid": true
+    },
+    "output_bytes": 10066636
+  },
+  "hud_old": {
+    "tag": "hud_old",
+    "env": [
+      "TELEM_CPU_WORKERS=2",
+      "TELEM_CPU_DIAG_NULL_SINK=1"
+    ],
+    "extra": "--profile fast --bitrate 16M",
+    "frames": 300,
+    "start_frame": 900,
+    "returncode": 0,
+    "process_wall_s": 27.51,
+    "sys_used_gb_before": 9.4,
+    "sys_used_gb_peak": 10.55,
+    "window_s": [
+      7.11,
+      23.94
+    ],
+    "sys_cpu_pct_window": 29.0,
+    "cores_window": {
+      "other": 0.0,
+      "main": 0.41,
+      "ffmpeg": 0.25,
+      "worker": 1.83
+    },
+    "rss_peak_mb": {
+      "other": 77.8,
+      "main": 457.8,
+      "ffmpeg": 145.2,
+      "worker": 986.4
+    },
+    "n_procs_peak": {
+      "other": 1,
+      "main": 1,
+      "ffmpeg": 1,
+      "worker": 2
+    },
+    "bench_line": "[BENCH RESULT] mode=direct success=False error=Zapis wideo nie powi\u00f3d\u0142 si\u0119: displaymatrix rotate=180 could not be written/verified (unexpected MP4 structure)",
+    "harness": {
+      "success": false,
+      "error": "Zapis wideo nie powi\u00f3d\u0142 si\u0119: displaymatrix rotate=180 could not be written/verified (unexpected MP4 structure)\nLokalizacja: C:\\GoPro\\TO\\p09\\hud_old.mp4\nLog: C:\\GoPro\\TO\\p09\\hud_old.log",
+      "elapsed_s": 15.53,
+      "total_frames": 0,
+      "effective_fps": 0.0,
+      "project_load_until_click_s": 4.361923900003603
+    },
+    "stream": {
+      "stream_wall_s": null,
+      "first_piped_frame_s": null,
+      "pipe_first_to_last_s": null,
+      "pipe_steady_fps": null,
+      "pipe_steady_window_frames": null,
+      "ffmpeg_drain_and_finalize_s": null,
+      "frames_written": null,
+      "workers": null,
+      "shm_slots": null
+    },
+    "validation": {
+      "valid": null,
+      "actual_video_frames": null,
+      "av": null,
+      "color_valid": null
+    },
+    "output_bytes": null
+  },
+  "hud_exact": {
+    "tag": "hud_exact",
+    "env": [
+      "TELEM_CPU_WORKERS=2",
+      "TELEM_CPU_DIAG_NULL_SINK=1"
+    ],
+    "extra": "--profile fast --bitrate 16M",
+    "frames": 300,
+    "start_frame": 900,
+    "returncode": 0,
+    "process_wall_s": 28.21,
+    "sys_used_gb_before": 9.34,
+    "sys_used_gb_peak": 10.62,
+    "window_s": [
+      7.11,
+      24.95
+    ],
+    "sys_cpu_pct_window": 31.0,
+    "cores_window": {
+      "ffmpeg": 0.26,
+      "worker": 1.94,
+      "main": 0.44,
+      "other": 0.0
+    },
+    "rss_peak_mb": {
+      "ffmpeg": 120.2,
+      "worker": 977.5,
+      "main": 457.8,
+      "other": 72.5
+    },
+    "n_procs_peak": {
+      "ffmpeg": 1,
+      "worker": 2,
+      "main": 1,
+      "other": 1
+    },
+    "bench_line": "[BENCH RESULT] mode=direct success=False error=Zapis wideo nie powi\u00f3d\u0142 si\u0119: displaymatrix rotate=180 could not be written/verified (unexpected MP4 structure)",
+    "harness": {
+      "success": false,
+      "error": "Zapis wideo nie powi\u00f3d\u0142 si\u0119: displaymatrix rotate=180 could not be written/verified (unexpected MP4 structure)\nLokalizacja: C:\\GoPro\\TO\\p09\\hud_exact.mp4\nLog: C:\\GoPro\\TO\\p09\\hud_exact.log",
+      "elapsed_s": 16.68,
+      "total_frames": 0,
+      "effective_fps": 0.0,
+      "project_load_until_click_s": 4.2509139999965555
+    },
+    "stream": {
+      "stream_wall_s": null,
+      "first_piped_frame_s": null,
+      "pipe_first_to_last_s": null,
+      "pipe_steady_fps": null,
+      "pipe_steady_window_frames": null,
+      "ffmpeg_drain_and_finalize_s": null,
+      "frames_written": null,
+      "workers": null,
+      "shm_slots": null
+    },
+    "validation": {
+      "valid": null,
+      "actual_video_frames": null,
+      "av": null,
+      "color_valid": null
+    },
+    "output_bytes": null
+  },
+  "process_audit": {
+    "tag": "process_audit",
+    "env": [
+      "TELEM_CPU_WORKERS=2"
+    ],
+    "extra": "--profile fast --bitrate 16M",
+    "frames": 60,
+    "start_frame": 900,
+    "returncode": 0,
+    "process_wall_s": 28.02,
+    "sys_used_gb_before": 9.41,
+    "sys_used_gb_peak": 13.24,
+    "window_s": [
+      7.12,
+      24.66
+    ],
+    "sys_cpu_pct_window": 63.4,
+    "cores_window": {
+      "other": 0.0,
+      "worker": 0.86,
+      "ffmpeg": 5.37,
+      "main": 0.31
+    },
+    "rss_peak_mb": {
+      "other": 78.0,
+      "worker": 805.7,
+      "ffmpeg": 3185.5,
+      "main": 456.7
+    },
+    "n_procs_peak": {
+      "other": 1,
+      "worker": 2,
+      "ffmpeg": 1,
+      "main": 1
+    },
+    "bench_line": "[BENCH RESULT] mode=direct success=True frames=60 elapsed=16.0s fps=3.7",
+    "harness": {
+      "success": true,
+      "error": "",
+      "elapsed_s": 16.02,
+      "total_frames": 60,
+      "effective_fps": 3.75,
+      "project_load_until_click_s": 4.365600600001926
+    },
+    "stream": {
+      "stream_wall_s": 15.77673259999574,
+      "first_piped_frame_s": 1.176878399994166,
+      "pipe_first_to_last_s": 9.588110100004997,
+      "pipe_steady_fps": 6.266342905613324,
+      "pipe_steady_window_frames": [
+        7,
+        54
+      ],
+      "ffmpeg_drain_and_finalize_s": 4.899783300003037,
+      "frames_written": 60,
+      "workers": null,
+      "shm_slots": null
+    },
+    "x265_rc": "Rate Control / qCompress            : ABR-16000 kbps / 0.60",
+    "x265": {
+      "frames": 60,
+      "s": 14.1,
+      "fps": 4.25,
+      "kbps": 17834.17
+    },
+    "validation": {
+      "valid": true,
+      "actual_video_frames": 60,
+      "av": {
+        "duration": 2.002,
+        "has_video": true,
+        "has_audio": true,
+        "streams_count": 2,
+        "size_bytes": 4532706,
+        "timing_error": null
+      },
+      "color_valid": true
+    },
+    "output_bytes": 4532706
+  },
+  "golden13": {
+    "tag": "golden13",
+    "env": [
+      "TELEM_CPU_WORKERS=2",
+      "TELEM_CPU_DIAG_DUMP_FRAMES=13",
+      "TELEM_CPU_DIAG_DUMP_DIR=C:\\GoPro\\TO\\p09\\golden13"
+    ],
+    "extra": "--profile fast --bitrate 16M --golden-dir C:\\GoPro\\TO\\p09\\golden13 --golden-frame 13",
+    "frames": 60,
+    "start_frame": 900,
+    "returncode": 0,
+    "process_wall_s": 19.82,
+    "sys_used_gb_before": 9.85,
+    "sys_used_gb_peak": 13.71,
+    "window_s": [
+      5.06,
+      17.33
+    ],
+    "sys_cpu_pct_window": 55.5,
+    "cores_window": {
+      "worker": 0.65,
+      "other": 0.0,
+      "ffmpeg": 4.55,
+      "main": 0.36
+    },
+    "rss_peak_mb": {
+      "worker": 789.2,
+      "other": 77.8,
+      "ffmpeg": 2970.1,
+      "main": 555.9
+    },
+    "n_procs_peak": {
+      "worker": 2,
+      "other": 1,
+      "ffmpeg": 1,
+      "main": 1
+    },
+    "bench_line": "[BENCH RESULT] mode=direct success=True frames=60 elapsed=9.0s fps=6.7",
+    "harness": {
+      "success": true,
+      "error": "",
+      "elapsed_s": 8.98,
+      "total_frames": 60,
+      "effective_fps": 6.68,
+      "project_load_until_click_s": 4.9046298999965074
+    },
+    "stream": {
+      "stream_wall_s": 8.753940800001146,
+      "first_piped_frame_s": 0.8225610000008601,
+      "pipe_first_to_last_s": 4.664198599995871,
+      "pipe_steady_fps": 14.575519472276584,
+      "pipe_steady_window_frames": [
+        7,
+        54
+      ],
+      "ffmpeg_drain_and_finalize_s": 3.8258439999990514,
+      "frames_written": 60,
+      "workers": null,
+      "shm_slots": null
+    },
+    "x265_rc": "Rate Control / qCompress            : ABR-16000 kbps / 0.60",
+    "x265": {
+      "frames": 60,
+      "s": 7.54,
+      "fps": 7.95,
+      "kbps": 17834.17
+    },
+    "validation": {
+      "valid": true,
+      "actual_video_frames": 60,
+      "av": {
+        "duration": 2.002,
+        "has_video": true,
+        "has_audio": true,
+        "streams_count": 2,
+        "size_bytes": 4532706,
+        "timing_error": null
+      },
+      "color_valid": true
+    },
+    "output_bytes": 4532706
+  },
+  "event_smoke": {
+    "tag": "event_smoke",
+    "env": [
+      "TELEM_CPU_WORKERS=2",
+      "TELEM_CPU_DIAG_DUMP_FRAMES=0",
+      "TELEM_CPU_DIAG_DUMP_DIR=C:\\GoPro\\TO\\p09\\event_smoke"
+    ],
+    "extra": "--profile fast --bitrate 16M --golden-dir C:\\GoPro\\TO\\p09\\event_smoke --golden-frame 0 --golden-ready-timeout 40",
+    "frames": 30,
+    "start_frame": 900,
+    "returncode": 0,
+    "process_wall_s": 19.77,
+    "sys_used_gb_before": 9.35,
+    "sys_used_gb_peak": 12.73,
+    "window_s": [
+      5.08,
+      17.44
+    ],
+    "sys_cpu_pct_window": 46.4,
+    "cores_window": {
+      "other": 0.18,
+      "main": 0.35,
+      "ffmpeg": 3.48,
+      "worker": 0.67
+    },
+    "rss_peak_mb": {
+      "other": 78.8,
+      "main": 543.5,
+      "ffmpeg": 2709.9,
+      "worker": 645.4
+    },
+    "n_procs_peak": {
+      "other": 2,
+      "main": 1,
+      "ffmpeg": 1,
+      "worker": 2
+    },
+    "bench_line": "[BENCH RESULT] mode=direct success=True frames=30 elapsed=8.4s fps=3.6",
+    "harness": {
+      "success": true,
+      "error": "",
+      "elapsed_s": 8.43,
+      "total_frames": 30,
+      "effective_fps": 3.56,
+      "project_load_until_click_s": 3.3817675999962375
+    },
+    "stream": {
+      "stream_wall_s": 8.195159700000659,
+      "first_piped_frame_s": 1.2022517999939737,
+      "pipe_first_to_last_s": 3.6473267000037595,
+      "pipe_steady_fps": 7.997653001796509,
+      "pipe_steady_window_frames": [
+        4,
+        27
+      ],
+      "ffmpeg_drain_and_finalize_s": 3.12968489999912,
+      "frames_written": 30,
+      "workers": null,
+      "shm_slots": null
+    },
+    "x265_rc": "Rate Control / qCompress            : ABR-16000 kbps / 0.60",
+    "x265": {
+      "frames": 30,
+      "s": 6.59,
+      "fps": 4.55,
+      "kbps": 20211.09
+    },
+    "validation": {
+      "valid": true,
+      "actual_video_frames": 30,
+      "av": {
+        "duration": 1.001,
+        "has_video": true,
+        "has_audio": true,
+        "streams_count": 2,
+        "size_bytes": 2565844,
+        "timing_error": null
+      },
+      "color_valid": true
+    },
+    "output_bytes": 2565844
+  }
+}

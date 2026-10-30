@@ -1021,6 +1021,8 @@ def main() -> None:
         parser.add_argument("--profile", choices=["fast", "balanced", "quality"], default="balanced")
         parser.add_argument("--golden-dir", default="", help="CPU harness: capture the editor HUD here")
         parser.add_argument("--golden-frame", type=int, default=0, help="export-relative frame index to capture")
+        parser.add_argument("--golden-ready-timeout", type=float, default=120.0,
+                            help="Maximum seconds to wait for CPU Golden preparation")
         parser.add_argument("--cpu-rate-mode", choices=["abr", "crf"], default="abr",
                             help="CPU harness: GUI 'Kontrola bitrate' selection")
         parser.add_argument("--layout", default="")
@@ -1058,6 +1060,8 @@ def main() -> None:
         cpu_harness = test_args.test_cpu_export
         if cpu_harness and (test_args.frames <= 0 or test_args.start_frame < 0 or test_args.mode != "direct"):
             parser.error("CPU harness requires --frames > 0, --start-frame >= 0 and --mode direct")
+        if cpu_harness and test_args.golden_dir and not 0 <= test_args.golden_frame < test_args.frames:
+            parser.error("--golden-frame must be within the exported frame range")
         if cpu_harness:
             os.environ["TELEM_CPU_HARNESS_TRACE"] = "1"
 
@@ -1370,12 +1374,6 @@ def main() -> None:
             rt.cmb_update_rate.setCurrentText("Full")
             rt.cmb_hud_resolution.setCurrentText("Auto")
             rt.edit_bitrate.setText(test_args.bitrate)
-            if cpu_harness and test_args.golden_dir:
-                from src.gui.qt.harness_golden import capture_editor_hud
-                vw = int(getattr(_controller, "video_width", 0) or 3840)
-                vh = int(getattr(_controller, "video_height", 0) or 2160)
-                bench_result["golden_editor_capture"] = capture_editor_hud(
-                    _controller, test_args.start_frame + test_args.golden_frame, test_args.golden_dir, vw, vh)
             rt.chk_hud_preview.setChecked(test_args.preview_hud)
             rt.chk_original_gpmf.setChecked(bool(test_args.gpmf))
             rt.edit_output.setText(str(out_path))
@@ -1644,6 +1642,27 @@ def main() -> None:
             print(f"[BENCH LEAN CHECK] {json.dumps(rows, default=str)}", flush=True)
 
         def _after_ready():
+            if cpu_harness and test_args.golden_dir and "golden_editor_capture" not in bench_result:
+                state, reason = _controller.export_readiness_state()
+                if window._render_tab.cmb_encoder.currentText().strip().lower() != "cpu":
+                    state, reason = "failed", "backend docelowy nie jest CPU"
+                if state != "ready":
+                    export_state["golden_done"] = False
+                    if state == "failed":
+                        _golden_fail(reason)
+                    else:
+                        golden_timeout.start(max(1, int(test_args.golden_ready_timeout * 1000)))
+                    return
+                from src.gui.qt.harness_golden import capture_editor_hud
+                vw = int(getattr(_controller, "video_width", 0) or 3840)
+                vh = int(getattr(_controller, "video_height", 0) or 2160)
+                try:
+                    bench_result["golden_editor_capture"] = capture_editor_hud(
+                        _controller, test_args.start_frame + test_args.golden_frame, test_args.golden_dir, vw, vh)
+                except Exception as exc:
+                    export_state["golden_done"] = False
+                    _golden_fail(f"przechwycenie HUD: {exc}")
+                    return
             if test_args.lean_check and "lean_check" not in bench_result:
                 _run_lean_check()
             if test_args.visual_edit_check and "visual_edit_check" not in bench_result:
@@ -1679,11 +1698,16 @@ def main() -> None:
                     and getattr(_controller.telemetry, "fit_data", None)
                     and not getattr(_controller, "_preview_telemetry_loading", False)
                     and btn.isEnabled()
-                    and (not test_args.wait_prepared or _background_preparation_done())):
+                    and (not test_args.wait_prepared or (cpu_harness and test_args.golden_dir)
+                         or _background_preparation_done())):
                 if not export_state["configured"]:
                     export_state["configured"] = True
                     _configure_export()  # may re-prepare for the selected backend
-                    QTimer.singleShot(100, _poll_ready_bench)
+                    if cpu_harness and test_args.golden_dir:
+                        get_signals().sig_export_readiness_changed.connect(_golden_ready_changed)
+                        _golden_ready_changed()
+                    else:
+                        QTimer.singleShot(100, _poll_ready_bench)
                     return
                 if test_args.wait_prepared:
                     from src.project_preparation import ProjectMapPreparation
@@ -1695,13 +1719,64 @@ def main() -> None:
                     return
                 _after_ready()
             else:
-                QTimer.singleShot(100, _poll_ready_bench)
+                if not (cpu_harness and test_args.golden_dir):
+                    QTimer.singleShot(100, _poll_ready_bench)
+
+        def _golden_fail(reason):
+            if export_state.get("golden_done"):
+                return
+            export_state["golden_done"] = True
+            golden_timeout.stop()
+            bench_result.update(success=False, error=f"Golden CPU readiness: {reason}")
+            print(f"[BENCH ERROR] {bench_result['error']}", flush=True)
+            if test_args.result_json:
+                Path(test_args.result_json).write_text(json.dumps(bench_result, indent=2), encoding="utf-8")
+            app.exit(1)
+
+        def _golden_ready_changed():
+            if export_state.get("golden_done"):
+                return
+            if window._render_tab.cmb_encoder.currentText().strip().lower() != "cpu":
+                _golden_fail("backend docelowy nie jest CPU")
+                return
+            state, reason = _controller.export_readiness_state()
+            if state == "failed":
+                _golden_fail(reason)
+            elif state == "ready":
+                export_state["golden_done"] = True
+                golden_timeout.stop()
+                from src.project_preparation import ProjectMapPreparation
+                bench_result["map_preparation"] = ProjectMapPreparation.instance().snapshot()
+                print(f"[BENCH] Golden CPU READY {json.dumps(bench_result['map_preparation'], default=str)}", flush=True)
+                if not export_state["checks_done"]:
+                    export_state["checks_done"] = True
+                    _run_preview_checks(_after_ready)
+                else:
+                    _after_ready()
+
+        golden_timeout = QTimer(window)
+        golden_timeout.setSingleShot(True)
+        golden_timeout.timeout.connect(lambda: _golden_fail("timeout przygotowania docelowego backendu"))
+        if cpu_harness and test_args.golden_dir:
+            golden_timeout.start(max(1, int(test_args.golden_ready_timeout * 1000)))
 
         print(f"[BENCH] Loading project: {video_path.name} + {fit_path.name} (mode={test_args.mode})", flush=True)
-        QTimer.singleShot(200, lambda: get_signals().sig_files_selected.emit(
-            [str(video_path)], "", str(fit_path),
-        ))
-        QTimer.singleShot(400, _poll_ready_bench)
+        if cpu_harness and test_args.golden_dir:
+            from PySide6.QtCore import Qt
+            signals = get_signals()
+            def _golden_initial_event(*_args):
+                if not export_state["configured"] and not export_state.get("golden_done"):
+                    _poll_ready_bench()
+            for signal in (signals.sig_export_readiness_changed, signals.sig_hud_model_ready,
+                           signals.sig_map_ready, signals.sig_compass_prepared):
+                signal.connect(_golden_initial_event, Qt.ConnectionType.QueuedConnection)
+            QTimer.singleShot(0, lambda: signals.sig_files_selected.emit(
+                [str(video_path)], "", str(fit_path)))
+        else:
+            QTimer.singleShot(200, lambda: get_signals().sig_files_selected.emit(
+                [str(video_path)], "", str(fit_path),
+            ))
+            QTimer.singleShot(400, _poll_ready_bench)
 
     elif "--test-sync-integrity" in sys.argv:
         import argparse

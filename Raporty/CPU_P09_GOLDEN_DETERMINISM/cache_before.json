@@ -1,0 +1,34 @@
+{
+  "lean": [
+    {
+      "frames": 300,
+      "ms_per_frame": 1.8200839999917662,
+      "rss_delta_mib": 36.4140625,
+      "entries": 40,
+      "max_entries": 360
+    },
+    {
+      "frames": 600,
+      "ms_per_frame": 1.6086731666655396,
+      "rss_delta_mib": 79.7734375,
+      "entries": 79,
+      "max_entries": 360
+    }
+  ],
+  "compass": [
+    {
+      "frames": 300,
+      "ms_per_frame": 0.45475666665879544,
+      "rss_delta_mib": 57.53125,
+      "entries": 40,
+      "max_entries": 64
+    },
+    {
+      "frames": 600,
+      "ms_per_frame": 0.40619266666908516,
+      "rss_delta_mib": 88.09765625,
+      "entries": 64,
+      "max_entries": 64
+    }
+  ]
+}
