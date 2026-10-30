@@ -697,8 +697,15 @@ intel_codec: str = "hevc",
     enable_compression_analysis: bool = False,
     is_10bit: bool = False,
     max_frames: int | None = None,
+    cpu_output_duration_s: float | None = None,
+    cpu_color_range: str = "",
     intel_output_duration_s: float | None = None,
     intel_encoder_profile: str = "balanced",
+    cpu_rate_mode: str = "crf",
+    nvidia_preview_port: Optional[int] = None,
+    nvidia_preview_fps: float = 2.0,
+    nvidia_preview_w: int = 960,
+    nvidia_preview_h: int = 540,
 ) -> tuple[list[str], str]:
     if overlay_w is not None:
         canvas_w = overlay_w
@@ -726,6 +733,7 @@ intel_codec: str = "hevc",
         needs_cpu_rotation = False
     has_cuts = bool(cut_regions and len(cut_regions) > 0)
     effective_rotation = container_rotation if container_rotation != 0 else rotation_degrees
+    cpu_rot180_metadata = encoder == "cpu" and container_rotation % 360 == 180
 
     no_res_change = not target_res or (render_w == canvas_w and render_h == canvas_h)
     if is_no_hud and encoder == "amd" and not needs_cpu_rotation and no_res_change and not has_cuts:
@@ -761,16 +769,13 @@ intel_codec: str = "hevc",
             input_args = ["-init_hw_device", "qsv=qsv:hw,child_device_type=d3d11va", "-filter_hw_device", "qsv", *input_args]
 
     if encoder == "nv" and not needs_cpu_rotation:
-        if hwaccel == "cuda":
-            if target_res:
-                base_filter = f"[0:v]scale_cuda={render_w}:{render_h}:format=yuv420p[base]"
-            else:
-                base_filter = "[0:v]scale_cuda=format=yuv420p[base]"
-        else:
-            if target_res:
-                base_filter = f"[0:v]hwupload_cuda,scale_cuda={render_w}:{render_h}:format=yuv420p[base]"
-            else:
-                base_filter = "[0:v]hwupload_cuda,scale_cuda=format=yuv420p[base]"
+        # NOTE: On 10-bit CUDA surfaces (p010le, e.g. GoPro HLG), scale_cuda's generic filter
+        # kernels (use_filters=auto or 1) fail to convert p010le to yuv420p when output resolution
+        # equals input resolution (producing all zeros / green frames).
+        # Specifying 'use_filters=0' forces the fixed-function CUDA kernel (cu_func_fixed), which
+        # correctly performs single-pass format conversion and scaling for all resolutions.
+        prefix = "[0:v]" if hwaccel == "cuda" else "[0:v]hwupload_cuda,"
+        base_filter = f"{prefix}scale_cuda={render_w}:{render_h}:format=yuv420p:use_filters=0[base]"
     elif encoder == "amd" and not needs_cpu_rotation:
         if effective_rotation == 180:
             base_filter = "[0:v]format=nv12,vflip,hflip[base]"
@@ -815,6 +820,9 @@ intel_codec: str = "hevc",
             base_filter = f"[0:v]hwdownload,format={cpu_format},scale={render_w}:{render_h}:flags=lanczos[base]"
         else:
             base_filter = f"[0:v]hwdownload,format={cpu_format}[base]"
+    elif cpu_rot180_metadata:
+        base_filter = (f"[0:v]scale={render_w}:{render_h}:flags=lanczos[base]"
+                       if target_res else "[0:v]null[base]")
     elif target_res:
         if effective_rotation == 180:
             base_filter = f"[0:v]scale={render_w}:{render_h}:flags=lanczos,vflip,hflip[base]"
@@ -874,8 +882,9 @@ intel_codec: str = "hevc",
                     )
 
                 next_base = f"[v_step_{i}]" if i < n_reg - 1 else "[vtemp]"
+                shortest_arg = ":shortest=1" if i == n_reg - 1 else ""
                 overlay_ops.append(
-                    f"{curr_base}[ov_{i}]overlay_cuda=x={s_dest_x}:y={s_dest_y}{next_base}"
+                    f"{curr_base}[ov_{i}]overlay_cuda=x={s_dest_x}:y={s_dest_y}{shortest_arg}{next_base}"
                 )
                 curr_base = next_base
 
@@ -902,7 +911,7 @@ intel_codec: str = "hevc",
                 ov_input = f"[1:v]setpts=PTS-STARTPTS,format=rgba,scale={scaled_stream_w}:{scaled_stream_h}:flags=bilinear,format=yuva420p,hwupload_cuda[ov]"
             else:
                 ov_input = "[1:v]setpts=PTS-STARTPTS,format=rgba,format=yuva420p,hwupload_cuda[ov]"
-            ov_op = f"overlay_cuda=x={scaled_hud_x}:y={scaled_hud_y}"
+            ov_op = f"overlay_cuda=x={scaled_hud_x}:y={scaled_hud_y}:shortest=1"
             filter_complex = f"{base_filter};{ov_input};[base][ov]{ov_op}[vtemp]"
     elif encoder == "amd" and use_gpu_compositor and not needs_cpu_rotation:
         if "-init_hw_device" not in input_args:
@@ -1049,6 +1058,10 @@ intel_codec: str = "hevc",
         ov_op = f"overlay={s_hud_x}:{s_hud_y}:shortest=1"
         filter_complex = f"{base_filter};{ov_input};[base][ov]{ov_op}[vtemp]"
 
+    if encoder == "cpu" and is_10bit:
+        # Keep the decoded base in 10-bit YUV; only the RGBA HUD is converted.
+        filter_complex = re.sub(r"(overlay=[^;\[]+)", r"\1:format=yuv420p10", filter_complex)
+
     if encoder == "intel":
         # The selected codec defines output depth. Preserve Main10/HDR through
         # overlay negotiation; SDR conversion happens only on explicit selection.
@@ -1087,6 +1100,16 @@ intel_codec: str = "hevc",
         v_out_map = "[vout]"
     else:
         v_out_map = "[vtemp]"
+
+    # ── NVIDIA CUDA Preview Tap ─────────────────────────────────────────
+    if encoder == "nv" and nvidia_preview_port is not None:
+        filter_complex += (
+            f";{v_out_map}split=2[venc][vprev_in];"
+            f"[vprev_in]fps={float(nvidia_preview_fps):g},"
+            f"scale_cuda={int(nvidia_preview_w)}:{int(nvidia_preview_h)}:format=nv12,"
+            f"hwdownload,format=nv12,format=bgra[vprev]"
+        )
+        v_out_map = "[venc]"
 
     cmd: list[str] = [
         ffmpeg_exe, "-y",
@@ -1140,14 +1163,15 @@ intel_codec: str = "hevc",
     # Pythonie), a poprawny displaymatrix rotate=180 jest wstrzykiwany do
     # kontenera po zakończeniu (src.ffmpeg.displaymatrix) — tag rotate=180 pełni
     # rolę zapasową.
-    out_rotation = 180 if nv_rot180_cuda else 0
+    out_rotation = 180 if nv_rot180_cuda or cpu_rot180_metadata else 0
     cmd.extend([
         "-map_metadata", "-1", "-metadata:s:v:0", f"rotate={out_rotation}",
     ])
 
     if encoder == "nv":
         from src.ffmpeg.nvidia_config import resolve_nvenc_ffmpeg_params
-        is_10bit_nv = bool(is_10bit and ("hevc" in nvidia_codec.lower() or "av1" in nvidia_codec.lower()))
+        is_sdr_nv = "sdr" in str(nvidia_codec).lower() or "264" in str(nvidia_codec).lower()
+        is_10bit_nv = bool(is_10bit and not is_sdr_nv and ("hevc" in str(nvidia_codec).lower() or "av1" in str(nvidia_codec).lower()))
         nv_params = resolve_nvenc_ffmpeg_params(
             codec=nvidia_codec,
             quality=nvidia_quality,
@@ -1215,21 +1239,39 @@ intel_codec: str = "hevc",
         else:
             cmd.extend(["-c:a", "copy"])
     else:
-        cmd.extend([
-            "-c:v", "libx265", "-preset", "medium", "-crf", "24",
-            "-pix_fmt", "yuv420p",
-        ])
+        from src.ffmpeg.cpu_x265 import build_cpu_x265_args
+        _x265_args, _x265_desc = build_cpu_x265_args(
+            intel_encoder_profile, cpu_rate_mode, video_bitrate)
+        cmd.extend(_x265_args)
+        print(f"[CPU] x265 {_x265_desc}", flush=True)
+        if is_10bit:
+            cmd.extend(["-profile:v", "main10", "-pix_fmt", "yuv420p10le",
+                        "-color_primaries", "bt2020", "-color_trc", "arib-std-b67",
+                        "-colorspace", "bt2020nc"])
+            if cpu_color_range in ("pc", "tv"):
+                cmd.extend(["-color_range", cpu_color_range])
+        else:
+            cmd.extend(["-pix_fmt", "yuv420p"])
         if has_cuts:
             cmd.extend(["-c:a", "aac", "-b:a", "192k"])
         else:
             cmd.extend(["-c:a", "copy"])
 
-    if encoder != "intel":
+    if encoder not in ("intel", "cpu"):  # CPU rate control is set with the codec args
         cmd = append_bitrate_args(cmd, encoder, video_bitrate)
     if max_frames is not None and int(max_frames) > 0:
         cmd.extend(["-frames:v", str(int(max_frames))])
+    if encoder == "cpu" and cpu_output_duration_s is not None:
+        cmd.extend(["-t", f"{cpu_output_duration_s:.9f}"])
     if encoder == "intel" and intel_output_duration_s is not None:
         cmd.extend(["-t", f"{intel_output_duration_s:.9f}"])
     cmd.append(str(output_file))
+    if encoder == "nv" and nvidia_preview_port is not None:
+        cmd.extend([
+            "-map", "[vprev]",
+            "-f", "rawvideo",
+            "-pix_fmt", "bgra",
+            f"tcp://127.0.0.1:{int(nvidia_preview_port)}",
+        ])
     cmd.extend(["-progress", "pipe:1", "-nostats", "-loglevel", "verbose" if encoder == "intel" else "error"])
     return cmd, filter_complex

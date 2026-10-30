@@ -103,6 +103,17 @@ class RenderError(RuntimeError):
     def display_message(self) -> str:
         """Short GUI-safe reason with the relevant location and next step."""
         message = self.user_message
+        if (
+            self.technical_message
+            and self.technical_message not in message
+            and message.strip() in (
+                "Eksport zakończył się błędem.",
+                "Wystąpił błąd podczas eksportu.",
+                "Sprzętowy enkoder zakończył działanie z błędem.",
+                "Urządzenie graficzne zakończyło eksport z błędem.",
+            )
+        ):
+            message += f"\nPrzyczyna: {self.technical_message}"
         if self.category == "source":
             location = str(self.clip or self.source_path or self.output_path or "")
         else:
@@ -338,6 +349,14 @@ def coerce_render_error(
             scope=ErrorScope.JOB_ONLY.value,
             **context,
         )
+    if type(exc).__name__ == "HUDNotReady" or "NOT READY:" in message:
+        return PreflightError(
+            code="HUD_NOT_READY",
+            user_message=f"Dane HUD nie są gotowe do eksportu:\n{message}",
+            recommended_action="Poczekaj na zakończenie przygotowania danych HUD lub wczytaj projekt ponownie.",
+            scope=ErrorScope.JOB_ONLY.value,
+            **context,
+        )
     if isinstance(exc, OSError):
         code = getattr(exc, "errno", None)
         winerror = getattr(exc, "winerror", None)
@@ -412,7 +431,13 @@ def coerce_render_error(
         error.technical_message = context["technical_message"]
         error.partial_output_possible = True
         return error
-    return RenderError(code="RENDER_ERROR", category="general", user_message="Eksport zakończył się błędem.", scope=ErrorScope.JOB_ONLY.value, **context)
+    return RenderError(
+        code="RENDER_ERROR",
+        category="general",
+        user_message=f"Eksport zakończył się błędem:\n{message}",
+        scope=ErrorScope.JOB_ONLY.value,
+        **context,
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -927,6 +952,7 @@ def validate_partial_output(
     ffprobe_exe: Union[str, Path],
     file_path: Union[str, Path],
     min_duration_s: float = 0.5,
+    check_av_timing: bool = False,
 ) -> tuple[bool, float, dict[str, Any]]:
     """Weryfikuje poprawność kontenera i strumieni w pliku częściowym przy użyciu ffprobe.
     
@@ -939,7 +965,7 @@ def validate_partial_output(
     cmd = [
         str(ffprobe_exe),
         "-v", "error",
-        "-show_entries", "format=duration,size:stream=codec_type,codec_name,width,height",
+        "-show_entries", "format=duration,size:stream=codec_type,codec_name,width,height,start_time,duration,sample_rate",
         "-of", "json",
         str(path),
     ]
@@ -966,12 +992,28 @@ def validate_partial_output(
         has_audio = any(s.get("codec_type") == "audio" for s in streams)
 
         is_valid = has_video and (duration >= min_duration_s)
+        timing_error = None
+        if check_av_timing and has_video and has_audio:
+            video = next(s for s in streams if s.get("codec_type") == "video")
+            audio = next(s for s in streams if s.get("codec_type") == "audio")
+            try:
+                vs, vd = float(video.get("start_time", 0)), float(video["duration"])
+                a_s, ad = float(audio.get("start_time", 0)), float(audio["duration"])
+                sample_rate = int(audio.get("sample_rate") or 48000)
+                tolerance = max(0.05, 2 * 1024 / sample_rate)
+                if abs(a_s - vs) > tolerance or abs((a_s + ad) - (vs + vd)) > tolerance:
+                    timing_error = "audio_video_timing_mismatch"
+            except (KeyError, TypeError, ValueError, ZeroDivisionError):
+                timing_error = "audio_video_timing_unavailable"
+            if timing_error:
+                is_valid = False
         return is_valid, duration, {
             "duration": duration,
             "has_video": has_video,
             "has_audio": has_audio,
             "streams_count": len(streams),
             "size_bytes": path.stat().st_size,
+            "timing_error": timing_error,
         }
     except Exception as exc:
         return False, 0.0, {"error": str(exc)}

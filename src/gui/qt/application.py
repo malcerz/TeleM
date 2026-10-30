@@ -17,6 +17,8 @@ from src.gui.qt.signals import get_signals
 def main() -> None:
     """Główny entry point aplikacji SportCamHUD (PySide6)."""
     import os
+    from src.config_paths import isolate_harness_config
+    isolate_harness_config(sys.argv, Path(__file__).resolve().parents[3])
     app = QApplication(sys.argv)
     app.setApplicationName("SportCamHUD")
 
@@ -35,7 +37,10 @@ def main() -> None:
     window.check_mpv_availability()
 
     # ── Tryb testowy: python TeleMGP.py -test / --test / --test-b / --test-c ──────────
-    if "--test-b" in sys.argv or "--test-c" in sys.argv:
+    if "--test-first-preview" in sys.argv:
+        from tools.first_preview_harness import install
+        install(app, window, _controller)
+    elif "--test-b" in sys.argv or "--test-c" in sys.argv:
         base_dir = Path(__file__).resolve().parent.parent.parent.parent
         video_dir = base_dir / "Video"
         video_path = video_dir / "GX020079.MP4"
@@ -273,7 +278,11 @@ def main() -> None:
                     idx_backend = rt.cmb_nvidia_backend.findData("legacy_cuda")
                     if idx_backend >= 0:
                         rt.cmb_nvidia_backend.setCurrentIndex(idx_backend)
-                    rt.cmb_nvidia_codec.setCurrentText("HEVC")
+                    idx_codec = rt.cmb_nvidia_codec.findData("hevc_main10")
+                    if idx_codec >= 0:
+                        rt.cmb_nvidia_codec.setCurrentIndex(idx_codec)
+                    else:
+                        rt.cmb_nvidia_codec.setCurrentText("HEVC")
                     rt.cmb_nvidia_quality.setCurrentText("P1")
                     rt.edit_bitrate.setText("40M")
                     rt.chk_compression_analysis.setChecked(False)
@@ -704,6 +713,10 @@ def main() -> None:
             if isinstance(stats, dict):
                 bench_result["stats"] = {k: v for k, v in stats.items() if not str(k).startswith("_")}
             bench_result["live_qp_samples"] = live_qp_samples
+            from src.project_preparation import contract as _contract, ProjectMapPreparation
+            bench_result["prepare_contract"] = _contract.summary()
+            bench_result["map_preparation"] = ProjectMapPreparation.instance().snapshot()
+            bench_result["map_gps_diagnostics"] = getattr(getattr(_controller, "telemetry", None), "map_gps_diagnostics", None)
 
             print(f"\n[BENCH RESULT] mode={test_args.mode} success=True frames={frames_done} elapsed={elapsed:.1f}s fps={eff_fps:.1f}", flush=True)
             for i, j_res in enumerate(completed_jobs, 1):
@@ -848,7 +861,7 @@ def main() -> None:
 
         get_signals().sig_render_progress.connect(_progress_bench)
 
-        def _trigger_test_export():
+        def _configure_test_export():
             rt = window._render_tab
             window.tabs.setCurrentWidget(rt)
 
@@ -883,6 +896,9 @@ def main() -> None:
                 rt._update_inout_labels()
             bench_result["range_start_seconds"] = test_args.start_seconds
             bench_result["preview_hud"] = bool(test_args.preview_hud)
+
+        def _trigger_test_export():
+            rt = window._render_tab
             t_start[0] = time.perf_counter()
             bench_result["click_perf_counter"] = t_start[0]
             bench_result["click_epoch"] = time.time()
@@ -917,20 +933,70 @@ def main() -> None:
         data_streams_ready_flag = [False]
         get_signals().sig_data_streams_ready.connect(lambda _: data_streams_ready_flag.__setitem__(0, True))
 
+        amd_configured_flag = [False]
+
         def _poll_ready_bench():
             btn = window._render_tab.btn_render
+            ready, _ = _controller.export_readiness()
             if (
                 data_streams_ready_flag[0]
+                and not getattr(_controller, "_preview_telemetry_loading", False)
                 and getattr(_controller, "source_color_summary", None) is not None
                 and getattr(_controller, "video_paths", None)
                 and getattr(_controller, "video_duration_s", 0.0) > 0
                 and getattr(_controller, "layout", None)
                 and btn.isEnabled()
+                and ready
             ):
-                if test_args.layout and Path(test_args.layout).is_file():
-                    from src.gui.layout_manager import normalize_layout
-                    _controller.layout = normalize_layout(Path(test_args.layout).resolve(), 1280, 720)
-                    print(f"[BENCH] Loaded custom benchmark layout: {test_args.layout}", flush=True)
+                if not amd_configured_flag[0]:
+                    amd_configured_flag[0] = True
+                    if test_args.layout and Path(test_args.layout).is_file() and not os.environ.get("TELEM_CONFIG_DIR"):
+                        from src.gui.layout_manager import normalize_layout
+                        _controller.layout = normalize_layout(Path(test_args.layout).resolve(), 1280, 720)
+                        print(f"[BENCH] Loaded custom benchmark layout: {test_args.layout}", flush=True)
+                    _configure_test_export()
+                    QTimer.singleShot(150, _poll_ready_bench)
+                    return
+                try:
+                    from src.integrations.esri import esri_client
+                    provider = getattr(_controller, "_prepared_hud_provider", None)
+                    actual = getattr(_controller, "_last_preview_hud_data", None)
+                    prev_idx = getattr(_controller, "_last_preview_hud_frame", 0) or 0
+                    prepared = provider.frame(prev_idx) if provider is not None else None
+                    value_keys = ("target_dt", "speed_value", "alt_value", "indicator_values", "extra_indicators",
+                                  "map_heading", "heading_compass", "elapsed_seconds", "avg_speed_kmh")
+                    vals = lambda d: {k: d.get(k) for k in value_keys} if isinstance(d, dict) else None
+                    f0 = int(round(test_args.start_seconds * float(_controller.fps or 29.97)))
+                    f_mid = f0 + max(0, test_args.frames // 2)
+                    f_end = f0 + max(0, test_args.frames - 1)
+                    sample_frames = {}
+                    if provider is not None:
+                        for lbl, fi in (("start", f0), ("mid", f_mid), ("end", f_end)):
+                            fd = provider.frame(fi)
+                            sample_frames[lbl] = {
+                                "frame_index": fi,
+                                "target_dt": str(fd.get("target_dt")),
+                                "map_heading": fd.get("map_heading"),
+                                "speed_value": fd.get("speed_value"),
+                                "gps_source": getattr(fd.get("gps_track"), "source", None),
+                                "gps_points": len(fd.get("gps_track") or ()),
+                            }
+                    pix = window.preview.hud_overlay.hud_pixmap
+                    if pix is not None and not pix.isNull():
+                        pix.save(str(out_path.with_name(out_path.stem + "_preview_hud.png")))
+                    window.grab().save(str(out_path.with_name(out_path.stem + "_preview_window.png")))
+                    bench_result["parity_audit"] = {
+                        "preview_frame_index": prev_idx,
+                        "numeric_parity": vals(actual) == vals(prepared) and actual is not None,
+                        "preview_map_heading": actual.get("map_heading") if isinstance(actual, dict) else None,
+                        "export_map_heading": prepared.get("map_heading") if isinstance(prepared, dict) else None,
+                        "selected_gps_source": getattr(_controller._project_map_gps_track(), "source", None),
+                        "selected_gps_points": len(_controller._project_map_gps_track() or ()),
+                        "esri_attribution": esri_client.attribution,
+                        "sample_frames": sample_frames,
+                    }
+                except Exception as exc:
+                    bench_result["parity_audit_error"] = str(exc)
                 _trigger_test_export()
             else:
                 QTimer.singleShot(100, _poll_ready_bench)
@@ -940,7 +1006,7 @@ def main() -> None:
             [str(v) for v in (video_list or [video_path])], "", str(fit_path) if fit_path else "",
         ))
         QTimer.singleShot(400, _poll_ready_bench)
-    elif "--test-intel-export" in sys.argv:
+    elif "--test-intel-export" in sys.argv or "--test-cpu-export" in sys.argv:
         import argparse
         import json
         import psutil
@@ -948,14 +1014,24 @@ def main() -> None:
 
         parser = argparse.ArgumentParser(description="SportCamHUD Intel Export Benchmark")
         parser.add_argument("--test-intel-export", action="store_true")
+        parser.add_argument("--test-cpu-export", action="store_true")
+        parser.add_argument("--start-frame", type=int, default=0)
         parser.add_argument("--codec", choices=["av1", "h264", "hevc", "hevc_sdr"], default="hevc")
         parser.add_argument("--intel-path", choices=["native", "ffmpeg"], default="native")
         parser.add_argument("--profile", choices=["fast", "balanced", "quality"], default="balanced")
+        parser.add_argument("--golden-dir", default="", help="CPU harness: capture the editor HUD here")
+        parser.add_argument("--golden-frame", type=int, default=0, help="export-relative frame index to capture")
+        parser.add_argument("--cpu-rate-mode", choices=["abr", "crf"], default="abr",
+                            help="CPU harness: GUI 'Kontrola bitrate' selection")
         parser.add_argument("--layout", default="")
         parser.add_argument("--fail-executor-init", action="store_true", help="Harness-only failure injection for FFmpeg cleanup")
         parser.add_argument("--fail-native-init", action="store_true", help="Harness-only -11 injection before the native pipe writer connects")
         parser.add_argument("--watchdog-seconds", type=int, default=120)
         parser.add_argument("--preview-hud", action="store_true")
+        parser.add_argument("--export-preview-evidence", default="",
+                            help="Harness-only: record export preview pixels, GUI heartbeat and cleanup")
+        parser.add_argument("--preview-toggle", action="store_true",
+                            help="Harness-only: switch Intel preview off and back on during export")
         parser.add_argument("--mode", choices=["direct", "queue"], default="direct")
         parser.add_argument("--video", default=r"C:\GoPro\2026-09-30\GX010331.MP4")
         parser.add_argument("--fit", default=r"C:\GoPro\2026-09-30\Poranna_jazda_na_rowerze.fit")
@@ -966,7 +1042,28 @@ def main() -> None:
         parser.add_argument("--gpmf", action="store_true", help="Preserve original GPMF stream")
         parser.add_argument("--cancel-after-frames", type=int, default=0,
                             help="Harness-only: press the GUI Cancel action after N rendered frames")
+        parser.add_argument("--wait-prepared", action="store_true",
+                            help="Harness-only: click Start after the project's background preparation finished")
+        parser.add_argument("--preview-checks", default="",
+                            help="Harness-only: directory; seek the Preview to start/middle/end before Start and record map tile misses + screenshots")
+        parser.add_argument("--offline-after-ready", action="store_true",
+                            help="Harness-only: refuse every outbound socket of this process and its export workers once the project is READY")
+        parser.add_argument("--reexport", action="store_true",
+                            help="Harness-only: export the same prepared project a second time")
+        parser.add_argument("--lean-check", default="",
+                            help="Harness-only: directory; after READY record the Lean value seen at the Preview time and in the export table for the same frame")
+        parser.add_argument("--visual-edit-check", default="",
+                            help="Harness-only: directory; edit every visual-only indicator key after READY and compare the reused HUD data with a fresh build")
         test_args, _ = parser.parse_known_args(sys.argv[1:])
+        cpu_harness = test_args.test_cpu_export
+        if cpu_harness and (test_args.frames <= 0 or test_args.start_frame < 0 or test_args.mode != "direct"):
+            parser.error("CPU harness requires --frames > 0, --start-frame >= 0 and --mode direct")
+        if cpu_harness:
+            os.environ["TELEM_CPU_HARNESS_TRACE"] = "1"
+
+        if test_args.export_preview_evidence:
+            from tools.intel_export_preview_probe import install
+            install(window, test_args.export_preview_evidence, toggle=test_args.preview_toggle)
 
         video_path = Path(test_args.video).resolve()
         fit_path = Path(test_args.fit).resolve()
@@ -989,9 +1086,13 @@ def main() -> None:
 
         t_start = [0.0]
         t_finish = [0.0]
+        cpu_project_load_started = time.perf_counter() if cpu_harness else None
         bench_result = {
+            "backend": "cpu" if cpu_harness else "intel",
+            "start_frame": test_args.start_frame if cpu_harness else 0,
             "codec": test_args.codec,
             "profile": test_args.profile,
+            "cpu_rate_mode": getattr(test_args, "cpu_rate_mode", None) if cpu_harness else None,
             "intel_path": test_args.intel_path,
             "mode": test_args.mode,
             "video": str(video_path),
@@ -1034,6 +1135,8 @@ def main() -> None:
                     bench_result["codec_error_dialog"] = txt
                     print(f"[BENCH DIALOG] {txt}", flush=True)
                     dialog.reject()
+                elif os.environ.get("TELEM_INTEL_NULL_BENCHMARK") == "1" and "MP4 po eksporcie" in txt:
+                    dialog.reject()
         dialog_timer.timeout.connect(_inspect_intel_error_dialog)
         dialog_timer.start(100)
 
@@ -1057,6 +1160,8 @@ def main() -> None:
             audio = [s for s in summary.get("streams", []) if s.get("codec_type") == "audio"]
             source_audio = any(s.get("codec_type") == "audio" for s in source_summary.get("streams", []))
             actual_frames = int(videos[0].get("nb_frames", 0)) if videos else 0
+            frames_done = actual_frames
+            eff_fps = actual_frames / elapsed if elapsed > 0 else 0.0
             import threading
             forwarders = [t.name for t in threading.enumerate() if t.name == "IntelPipeForwarder"]
             bench_result["pipe_forwarders_after_export"] = forwarders
@@ -1066,6 +1171,23 @@ def main() -> None:
                 valid = valid and actual_frames == test_args.frames
             if videos and audio:
                 valid = valid and abs(float(videos[0].get("duration", 0)) - float(audio[0].get("duration", 0))) < 0.1
+            if cpu_harness:
+                from src.ffmpeg.render_errors import validate_partial_output
+                from src.ffmpeg.hdr_color import probe_video_color
+                from src.runtime_paths import get_ffprobe_exe
+                av_valid, _, av_details = validate_partial_output(get_ffprobe_exe(), final_path,
+                                                                   min_duration_s=0, check_av_timing=True)
+                source_color = probe_video_color(video_path, str(get_ffmpeg_exe()))
+                output_color = probe_video_color(final_path, str(get_ffmpeg_exe()))
+                color_valid = (not source_color.is_hlg or
+                               (output_color.is_hlg and output_color.bit_depth == 10 and
+                                output_color.pix_fmt == "yuv420p10le" and
+                                output_color.color_primaries == source_color.color_primaries and
+                                output_color.color_space == source_color.color_space and
+                                output_color.color_range == source_color.color_range))
+                valid = valid and av_valid and color_valid
+                bench_result["cpu_validation"] = {"av": av_details, "source_color": source_color.to_dict(),
+                                                  "output_color": output_color.to_dict(), "color_valid": color_valid}
             bench_result["validation"] = {"valid": valid, "probe": summary, "actual_video_frames": actual_frames}
             bench_result["success"] = valid
             if not valid:
@@ -1078,14 +1200,42 @@ def main() -> None:
             bench_result["output_size_bytes"] = os.path.getsize(out_path) if out_path.exists() else 0
             if isinstance(stats, dict):
                 bench_result["stats"] = {k: v for k, v in stats.items() if not str(k).startswith("_")}
+            if cpu_harness:
+                bench_result["cpu_stream_metrics"] = getattr(_controller, "render_process_holder", {}).get("cpu_stream_metrics")
 
             print(f"\n[BENCH RESULT] mode={test_args.mode} success={valid} frames={actual_frames} elapsed={elapsed:.1f}s fps={eff_fps:.1f}", flush=True)
+            from src.project_preparation import contract as _contract
+            bench_result["prepare_contract"] = _contract.summary()
+            if test_args.reexport and "first_run" not in bench_result:
+                import copy as _copy
+                bench_result["first_run"] = _copy.deepcopy(bench_result)
+                print("[BENCH] Re-exporting the same prepared project", flush=True)
+                faulthandler.dump_traceback_later(test_args.watchdog_seconds, exit=True)
+                QTimer.singleShot(1500, lambda: _click_start(reexport=True))
+                return
             if test_args.result_json:
-                Path(test_args.result_json).write_text(json.dumps(bench_result, indent=2), encoding="utf-8")
+                Path(test_args.result_json).write_text(json.dumps(bench_result, indent=2, default=str), encoding="utf-8")
             QTimer.singleShot(500, window.close)
 
         def _on_render_error_bench(msg):
             faulthandler.cancel_dump_traceback_later()
+            if os.environ.get("TELEM_INTEL_NULL_BENCHMARK") == "1":
+                from src.ffmpeg.intel_native_exporter import get_last_intel_export_stats
+                native = get_last_intel_export_stats()
+                if native.get("diagnostic_null_sink"):
+                    bench_result.update(diagnostic_null_sink=True, stats=native,
+                        success=(native.get("finish_rc") == 0 and native.get("encoded_frames") == native.get("frames_rendered")
+                                 and native.get("encoded_frames") == native.get("requested_frames", test_args.frames)),
+                        total_frames=native.get("encoded_frames"),
+                        elapsed_s=native.get("total_wall_seconds"),
+                        effective_fps=native.get("encoded_frames", 0) / max(.001, native.get("total_wall_seconds", 0)),
+                        expected_no_mp4_message=str(msg))
+                    from src.project_preparation import contract as _null_contract
+                    bench_result["prepare_contract"] = _null_contract.summary()
+                    if test_args.result_json:
+                        Path(test_args.result_json).write_text(json.dumps(bench_result, indent=2, default=str), encoding="utf-8")
+                    QTimer.singleShot(500, window.close)
+                    return
             t_finish[0] = time.perf_counter()
             elapsed = max(0.001, t_finish[0] - t_start[0])
             vm = psutil.virtual_memory()
@@ -1115,6 +1265,79 @@ def main() -> None:
 
         get_signals().sig_render_progress.connect(_progress_bench)
 
+        # Opt-in acceptance evidence from the real GUI event loop. No production
+        # control is bypassed and no system-wide input is synthesized.
+        acceptance_dir = os.environ.get("TELEM_INTEL_ACCEPTANCE_DIR")
+        if acceptance_dir:
+            evidence_dir = Path(acceptance_dir)
+            evidence_dir.mkdir(parents=True, exist_ok=True)
+            latest_progress = {"done": 0, "total": test_args.frames}
+            sample_previous = [time.perf_counter(), 0]
+            tab_actions = set()
+            def _acceptance_progress(done, total, elapsed, fps, hud_state):
+                if total > 1:
+                    latest_progress.update(done=int(done), total=int(total))
+            get_signals().sig_render_progress.connect(_acceptance_progress)
+            def _acceptance_sample():
+                if not t_start[0]:
+                    return
+                now = time.perf_counter()
+                done = latest_progress["done"]
+                dt = now-sample_previous[0]
+                row = dict(qpc_s=now, since_gui_start_s=now-t_start[0], frame=done,
+                           fps=(done-sample_previous[1])/dt, window_s=dt)
+                with (evidence_dir/"fps_10s.jsonl").open("a",encoding="utf-8") as f:
+                    f.write(json.dumps(row)+"\n")
+                sample_previous[:] = [now, done]
+            acceptance_timer = QTimer(window)
+            acceptance_timer.timeout.connect(_acceptance_sample)
+            acceptance_timer.start(10000)
+            def _acceptance_tabs():
+                rt = window._render_tab
+                if latest_progress["done"] > 0 and rt._rendering and "initialRendering" not in tab_actions:
+                    tab_actions.add("initialRendering")
+                    window.tabs.setCurrentWidget(rt)
+                if latest_progress["done"] < 2000 or not rt._rendering:
+                    return
+                steps = [(2000,"Ustawienia"),(2200,"Wczytywanie"),(2400,"Projekt"),(2600,"Rendering")]
+                for threshold, title in steps:
+                    if latest_progress["done"] >= threshold and title not in tab_actions:
+                        tab_actions.add(title)
+                        for i in range(window.tabs.count()):
+                            if window.tabs.tabText(i) == title:
+                                window.tabs.setCurrentIndex(i)
+                                def capture(title=title):
+                                    overlay = window.preview.hud_overlay
+                                    pix = rt.hud_preview_label.pixmap()
+                                    row=dict(tab=title,frame=latest_progress["done"],rendering=rt._rendering,
+                                             can_show_hud=overlay.can_show_hud(),overlay_visible=overlay.isVisible(),
+                                             tap_active=rt._export_preview_gpu_tap,preview_pixmap=bool(pix and not pix.isNull()))
+                                    window.grab().save(str(evidence_dir/f"tab_{title}.png"))
+                                    with (evidence_dir/"tabs.jsonl").open("a",encoding="utf-8") as f:
+                                        f.write(json.dumps(row)+"\n")
+                                QTimer.singleShot(150,capture)
+                                break
+                        break
+                if latest_progress["done"] >= 2800 and "dialog" not in tab_actions:
+                    tab_actions.add("dialog")
+                    dialog=QMessageBox(window)
+                    dialog.setWindowTitle("Acceptance: dialog during export")
+                    dialog.setText("Test izolacji HUD podczas aktywnego eksportu")
+                    dialog.setModal(True)
+                    dialog.open()
+                    def capture_dialog():
+                        overlay=window.preview.hud_overlay
+                        row=dict(tab="dialog",frame=latest_progress["done"],modal_active=QApplication.activeModalWidget() is dialog,
+                                 can_show_hud=overlay.can_show_hud(),overlay_visible=overlay.isVisible())
+                        dialog.grab().save(str(evidence_dir/"dialog.png"))
+                        with (evidence_dir/"tabs.jsonl").open("a",encoding="utf-8") as f:
+                            f.write(json.dumps(row)+"\n")
+                        dialog.accept()
+                    QTimer.singleShot(250,capture_dialog)
+            acceptance_tabs_timer = QTimer(window)
+            acceptance_tabs_timer.timeout.connect(_acceptance_tabs)
+            acceptance_tabs_timer.start(500)
+
         def _on_render_stopped_cancel_bench():
             if not cancel_state["requested"]:
                 return
@@ -1129,13 +1352,14 @@ def main() -> None:
 
         get_signals().sig_render_stopped.connect(_on_render_stopped_cancel_bench)
 
-        def _trigger_test_export():
+        def _configure_export():
             rt = window._render_tab
-            window.tabs.setCurrentWidget(rt)
-
             rt.cmb_render_mode.setCurrentIndex(rt.cmb_render_mode.findData("gpu"))
-            rt.cmb_encoder.setCurrentText("intel")
+            rt.cmb_encoder.setCurrentText("cpu" if cpu_harness else "intel")
             rt.cmb_encoder_profile.setCurrentIndex(rt.cmb_encoder_profile.findData(test_args.profile))
+            if cpu_harness:
+                rt.cmb_cpu_profile.setCurrentIndex(rt.cmb_cpu_profile.findData(test_args.profile))
+                rt.cmb_cpu_rate_mode.setCurrentIndex(rt.cmb_cpu_rate_mode.findData(test_args.cpu_rate_mode))
             if test_args.layout:
                 from src.gui.layout_manager import normalize_layout
                 _controller.layout = normalize_layout(Path(test_args.layout).resolve(), 1280, 720)
@@ -1146,12 +1370,93 @@ def main() -> None:
             rt.cmb_update_rate.setCurrentText("Full")
             rt.cmb_hud_resolution.setCurrentText("Auto")
             rt.edit_bitrate.setText(test_args.bitrate)
+            if cpu_harness and test_args.golden_dir:
+                from src.gui.qt.harness_golden import capture_editor_hud
+                vw = int(getattr(_controller, "video_width", 0) or 3840)
+                vh = int(getattr(_controller, "video_height", 0) or 2160)
+                bench_result["golden_editor_capture"] = capture_editor_hud(
+                    _controller, test_args.start_frame + test_args.golden_frame, test_args.golden_dir, vw, vh)
             rt.chk_hud_preview.setChecked(test_args.preview_hud)
             rt.chk_original_gpmf.setChecked(bool(test_args.gpmf))
             rt.edit_output.setText(str(out_path))
             rt._user_edited_output = True
+            if cpu_harness and not getattr(rt, "_cpu_harness_wrapped", False):
+                original_start_render = rt._start_render
+                def _cpu_start_render(options, *args, **kwargs):
+                    options = dict(options, encoder="cpu", start_frame=test_args.start_frame,
+                                   max_frames=test_args.frames)
+                    return original_start_render(options, *args, **kwargs)
+                rt._start_render = _cpu_start_render
+                rt._cpu_harness_wrapped = True
 
+        export_state = {"configured": False, "checks_done": not test_args.preview_checks, "offline": False}
+        heartbeat = QTimer(window)
+        heartbeat_gaps = []
+        heartbeat_last = [time.perf_counter()]
+        def _prepare_heartbeat():
+            now = time.perf_counter()
+            heartbeat_gaps.append((now - heartbeat_last[0]) * 1000)
+            heartbeat_last[0] = now
+        heartbeat.timeout.connect(_prepare_heartbeat)
+        heartbeat.start(20)
+        import threading as _hb_threads
+        import traceback as _hb_traceback
+        heartbeat_stalls = []
+        def _watch_prepare_gui():
+            main_id = _hb_threads.main_thread().ident
+            while t_start[0] == 0 and len(heartbeat_stalls) < 40:
+                lag = time.perf_counter() - heartbeat_last[0]
+                if lag > .25:
+                    frame = sys._current_frames().get(main_id)
+                    if frame is not None:
+                        heartbeat_stalls.append({"gap_ms": lag * 1000,
+                              "stack": "".join(_hb_traceback.format_stack(frame)),
+                              "hud_building": bool((getattr(_controller, "_hud_data_state", None) or {}).get("building")),
+                              "project_loading": bool(getattr(_controller, "_project_loading", False)),
+                              "workers": {thread.name: "".join(_hb_traceback.format_stack(sys._current_frames()[thread.ident]))
+                                  for thread in _hb_threads.enumerate()
+                                  if thread.ident in sys._current_frames() and
+                                  any(word in thread.name.lower() for word in ("prepare", "project", "load"))}})
+                time.sleep(.1)
+        _hb_threads.Thread(target=_watch_prepare_gui, name="HarnessGuiHeartbeat", daemon=True).start()
+
+        def _click_start(reexport=False):
+            if cpu_harness and not reexport:
+                bench_result["project_load_until_click_s"] = time.perf_counter() - cpu_project_load_started
+            if not reexport:
+                heartbeat.stop()
+                gaps = sorted(heartbeat_gaps)
+                bench_result["prepare_gui_heartbeat"] = {
+                    "interval_ms": 20, "samples": len(gaps),
+                    "max_gap_ms": max(gaps, default=0),
+                    "p95_gap_ms": gaps[int((len(gaps)-1)*.95)] if gaps else None,
+                    "gaps_over_100ms": sum(g > 100 for g in gaps),
+                    "stall_samples": heartbeat_stalls,
+                }
+                Path(str(out_path) + ".prepare_gui.json").write_text(
+                    json.dumps(bench_result["prepare_gui_heartbeat"], indent=2), encoding="utf-8")
+            rt = window._render_tab
+            window.tabs.setCurrentWidget(rt)
+            if reexport:
+                second = out_path.with_name(out_path.stem + "_reexport" + out_path.suffix)
+                if second.exists():
+                    second.unlink()
+                rt.edit_output.setText(str(second))
+                rt._user_edited_output = True
+            if acceptance_dir:
+                import numpy as np
+                hybrid_result = getattr(_controller.telemetry, "_compass_result", None)
+                if hybrid_result is not None:
+                    np.save(evidence_dir/"compass_hybrid_axis.npy", hybrid_result.axis)
+                from src.telemetry_compass_hybrid import snapshot_manager
+                compass_inputs = snapshot_manager(_controller.telemetry)
+                np.savez(evidence_dir/"compass_inputs.npz", gyro=compass_inputs.gyroscope_samples,
+                         accel=compass_inputs.accelerometer_samples,fit_track=compass_inputs.fit_gps_track,
+                         fit_speed=compass_inputs.fit_data["speed"])
             t_start[0] = time.perf_counter()
+            if acceptance_dir:
+                sample_previous[:] = [t_start[0], 0]
+                (evidence_dir/"gui_start.json").write_text(json.dumps(dict(qpc_s=t_start[0],epoch=time.time())),encoding="utf-8")
 
             if test_args.mode == "queue":
                 # Clear any leftover jobs so only this benchmark job executes
@@ -1163,15 +1468,232 @@ def main() -> None:
                 rt._on_queue_start()
             else:
                 print("[BENCH] Triggering direct render...", flush=True)
-                rt._on_render()
+                rt.btn_render.click()
+
+        def _install_offline_guard():
+            from src.project_preparation import install_offline_guard
+            install_offline_guard("harness-gui")
+            os.environ["TELEM_HARNESS_OFFLINE"] = "1"
+            export_state["offline"] = True
+            bench_result["offline_after_ready"] = True
+            print("[BENCH] Offline after READY: outbound sockets refused in GUI and export workers", flush=True)
+
+        def _run_preview_checks(then):
+            from src.integrations import esri as _esri
+            from src.moving_map import TileCache
+            evidence = Path(test_args.preview_checks)
+            evidence.mkdir(parents=True, exist_ok=True)
+            duration = float(getattr(_controller, "video_duration_s", 0.0) or 0.0)
+            points = [("start", 0.5), ("middle", duration / 2.0), ("end", max(0.0, duration - 1.0))]
+            provider = getattr(_controller, "_prepared_hud_provider", None)
+            if provider is not None:
+                import numpy as _point_np
+                columns = provider.columnar_cache().columns
+                candidates = [("alt_min", "alt", False), ("alt_max", "alt", True)]
+                lean_key = next(iter(provider.cache.static.lean_keys), None)
+                if lean_key:
+                    candidates.append(("turn_peak", f"lean_{lean_key}", True))
+                for name, key, maximum in candidates:
+                    channel = columns.get(key)
+                    if channel is not None and _point_np.isfinite(channel).any():
+                        values = _point_np.abs(channel) if name == "turn_peak" else channel
+                        index = int(_point_np.nanargmax(values) if maximum else _point_np.nanargmin(values))
+                        points.append((name, index / provider.fps))
+            misses = {"current": None, "rows": []}
+            real_cached = _esri.esri_client.cached_image
+            real_get = TileCache.get
+
+            def counted_cached(z, x, y):
+                img = real_cached(z, x, y)
+                if img is None and misses["current"] is not None:
+                    misses["current"].add((z, x, y))
+                return img
+
+            def counted_get(self, z, x, y, style):
+                img = real_get(self, z, x, y, style)
+                if img is None and misses["current"] is not None:
+                    misses["current"].add((z, x, y))
+                return img
+
+            _esri.esri_client.cached_image = counted_cached
+            TileCache.get = counted_get
+            last_frame = {"img": None, "index": None}
+
+            def keep_frame(qimg):
+                last_frame["img"] = qimg.copy()
+                last_frame["index"] = getattr(_controller, "_last_preview_hud_frame", None)
+
+            get_signals().sig_preview_frame_ready.connect(keep_frame)
+            window.tabs.setCurrentWidget(window._project_tab)
+
+            def step(i):
+                if i > 0:
+                    name, sec = points[i - 1]
+                    provider = getattr(_controller, "_prepared_hud_provider", None)
+                    expected = provider.frame_index(sec) if provider is not None else None
+                    if last_frame["index"] != expected or last_frame["img"] is None:
+                        # A screenshot of the preceding seek is not parity evidence.
+                        attempts[0] += 1
+                        if attempts[0] < 150:
+                            QTimer.singleShot(100, lambda: step(i))
+                            return
+                    actual = getattr(_controller, "_last_preview_hud_data", None)
+                    prepared = provider.frame(expected) if provider is not None and expected is not None else None
+                    value_keys = ("target_dt", "speed_value", "alt_value", "indicator_values", "extra_indicators",
+                                  "map_heading", "heading_compass", "elapsed_seconds", "avg_speed_kmh")
+                    values = lambda data: {k: data.get(k) for k in value_keys} if data is not None else None
+                    shot = evidence / f"preview_{name}.png"
+                    window.grab().save(str(shot))
+                    if last_frame["img"] is not None:
+                        # The composed Preview frame (HUD layer; MPV draws the video natively).
+                        last_frame["img"].save(str(evidence / f"preview_{name}_hud.png"))
+                    row = dict(point=name, seconds=round(sec, 3), map_tile_misses=len(misses["current"]),
+                               missing=sorted(misses["current"])[:10], screenshot=str(shot),
+                               readiness=_controller.export_readiness(), expected_frame=expected,
+                               actual_frame=last_frame["index"], fresh=last_frame["index"] == expected,
+                               preview_values=values(actual), export_values=values(prepared),
+                               numeric_parity=values(actual) == values(prepared) and actual is not None)
+                    misses["rows"].append(row)
+                    print(f"[BENCH PREVIEW CHECK] {json.dumps(row, default=str)}", flush=True)
+                if i >= len(points):
+                    misses["current"] = None
+                    _esri.esri_client.cached_image = real_cached
+                    TileCache.get = real_get
+                    (evidence / "preview_checks.json").write_text(json.dumps(misses["rows"], indent=2, default=str), encoding="utf-8")
+                    bench_result["preview_checks"] = misses["rows"]
+                    get_signals().sig_preview_frame_ready.disconnect(keep_frame)
+                    then()
+                    return
+                misses["current"] = set()
+                last_frame.update(img=None, index=None)
+                attempts[0] = 0
+                get_signals().sig_seek_changed.emit(float(points[i][1]))
+                QTimer.singleShot(3000, lambda: step(i + 1))
+
+            attempts = [0]
+            step(0)
+
+        def _run_visual_edit_check():
+            from src.ffmpeg.intel_native_exporter import (
+                prepared_intel_hud_data, build_intel_hud_data, intel_hud_data_ready, _is_visual_only_key)
+            from src.telemetry_precompute import compare_telemetry_caches, _same_value
+            evidence = Path(test_args.visual_edit_check)
+            evidence.mkdir(parents=True, exist_ok=True)
+            ctx0 = _controller._intel_hud_ctx()
+            prepared = prepared_intel_hud_data(ctx0)
+            edits = []
+            for name, cfg in _controller.layout.get("indicators", {}).items():
+                if not isinstance(cfg, dict):
+                    continue
+                for key in list(cfg):
+                    if not _is_visual_only_key(key):
+                        continue
+                    value = cfg[key]
+                    if isinstance(value, bool):
+                        cfg[key] = not value
+                    elif isinstance(value, (int, float)):
+                        cfg[key] = value + (0.37 if key in ("x", "y") else 1)
+                    elif isinstance(value, str) and (value.startswith("#") or key.endswith("color")):
+                        cfg[key] = "#123456"
+                    elif key == "font":
+                        cfg[key] = "Arial"
+                    else:
+                        continue
+                    edits.append(f"{name}.{key}")
+            ctx1 = _controller._intel_hud_ctx()
+            reused = intel_hud_data_ready(ctx1)
+            fresh = build_intel_hud_data(ctx1, complete=True)
+            result = {"edited_keys": len(edits), "edited_sample": edits[:40], "prepared_before_edit": prepared is not None,
+                      "reused_after_edit": reused}
+            if prepared is not None:
+                result["telemetry_parity"] = compare_telemetry_caches(fresh["telemetry_cache"], prepared["telemetry_cache"])
+                result["chart_data_equal"] = _same_value(fresh["chart_data"], prepared["chart_data"])
+                result["range_cache_equal"] = _same_value(fresh["range_cache"], prepared["range_cache"])
+            (evidence / "visual_edit_check.json").write_text(json.dumps(result, indent=2, default=str), encoding="utf-8")
+            bench_result["visual_edit_check"] = {k: v for k, v in result.items() if k != "edited_sample"}
+            print(f"[BENCH VISUAL EDIT CHECK] {json.dumps(bench_result['visual_edit_check'], default=str)}", flush=True)
+
+        def _run_lean_check():
+            from datetime import timedelta as _td
+            from src.ffmpeg.intel_native_exporter import prepared_intel_hud_data, prepare_intel_hud_data
+            from src.telemetry_imu import interpolate_roll
+            evidence = Path(test_args.lean_check)
+            evidence.mkdir(parents=True, exist_ok=True)
+            ctx = _controller._intel_hud_ctx()
+            data = prepared_intel_hud_data(ctx) or prepare_intel_hud_data(ctx)
+            table = data["telemetry_cache"]
+            cfg = _controller.layout["indicators"].get("lean_indicator", {})
+            smooth = float(cfg.get("lean_smoothing_s", 0.0) or 0.0)
+            timeline = _controller.telemetry._get_lean_roll_samples(str(cfg.get("axis", "y")), smooth)
+            rows = []
+            for t in (0.5, 49.5, 620.587, 1240.173):
+                frame = int(round(t * float(ctx["target_fps"])))
+                resolved = _controller._resolve_preview_time(t)
+                preview_dt = resolved.get("absolute_dt") or (ctx["start_dt_utc"] + _td(seconds=t))
+                record = table.lookup(frame)
+                export_dt = record.get("target_dt")
+                rows.append(dict(
+                    t=t, frame=frame, preview_dt=str(preview_dt), export_target_dt=str(export_dt),
+                    preview_timeline_value=interpolate_roll(timeline, preview_dt),
+                    export_table_value=record["extra_indicators"].get("lean_indicator", [None])[0],
+                    timeline_at_export_dt=interpolate_roll(timeline, export_dt) if hasattr(export_dt, "tzinfo") else None,
+                    lean_axis=cfg.get("axis"), lean_smoothing_s=smooth, lean_sync_ms=cfg.get("lean_sync_ms"),
+                    timeline_samples=len(timeline)))
+            (evidence / "lean_check.json").write_text(json.dumps(rows, indent=2, default=str), encoding="utf-8")
+            bench_result["lean_check"] = rows
+            print(f"[BENCH LEAN CHECK] {json.dumps(rows, default=str)}", flush=True)
+
+        def _after_ready():
+            if test_args.lean_check and "lean_check" not in bench_result:
+                _run_lean_check()
+            if test_args.visual_edit_check and "visual_edit_check" not in bench_result:
+                _run_visual_edit_check()
+            if test_args.offline_after_ready and not export_state["offline"]:
+                _install_offline_guard()
+            _click_start()
+
+        def _background_preparation_done() -> bool:
+            ready, reason = _controller.export_readiness()
+            if not ready:
+                if bench_result.get("_last_not_ready") != reason:
+                    bench_result["_last_not_ready"] = reason
+                    print(f"[BENCH] waiting for READY: {reason}", flush=True)
+                return False
+            telem = _controller.telemetry
+            layout = getattr(_controller, "layout", None) or {}
+            for key, cfg in layout.get("indicators", {}).items():
+                if (isinstance(cfg, dict) and cfg.get("enabled", True)
+                        and (cfg.get("form") == "lean" or key == "lean_indicator")
+                        and str(cfg.get("source", "gyro")).strip().lower() != "grade"):
+                    axis = str(cfg.get("axis", "x")).strip().lower()
+                    axis = axis if axis in ("x", "y", "z") else "x"
+                    smooth = float(cfg.get("lean_smoothing_s", 0.0) or 0.0)
+                    if f"{axis}_{smooth:.2f}" not in getattr(telem, "_lean_roll_cache", {}):
+                        return False
+            worker = getattr(telem, "_compass_worker", None)
+            return worker is None or not worker.is_alive()
 
         def _poll_ready_bench():
             btn = window._render_tab.btn_render
             if (getattr(_controller, "telemetry", None)
                     and getattr(_controller.telemetry, "fit_data", None)
                     and not getattr(_controller, "_preview_telemetry_loading", False)
-                    and btn.isEnabled()):
-                _trigger_test_export()
+                    and btn.isEnabled()
+                    and (not test_args.wait_prepared or _background_preparation_done())):
+                if not export_state["configured"]:
+                    export_state["configured"] = True
+                    _configure_export()  # may re-prepare for the selected backend
+                    QTimer.singleShot(100, _poll_ready_bench)
+                    return
+                if test_args.wait_prepared:
+                    from src.project_preparation import ProjectMapPreparation
+                    bench_result["map_preparation"] = ProjectMapPreparation.instance().snapshot()
+                    print(f"[BENCH] Project READY {json.dumps(bench_result['map_preparation'], default=str)}; clicking Start", flush=True)
+                if not export_state["checks_done"]:
+                    export_state["checks_done"] = True
+                    _run_preview_checks(_after_ready)
+                    return
+                _after_ready()
             else:
                 QTimer.singleShot(100, _poll_ready_bench)
 

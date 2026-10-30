@@ -135,23 +135,14 @@ def test_extract_frame_uncached_capture_is_released():
 
 
 def test_encoder_fallback_on_unsupported_gpu():
-    """When nvenc is not supported (e.g. on AMD system), validation should fallback to best encoder."""
-    from src.ffmpeg_pipeline import detect_best_encoder, _test_encoder
-    import src.ffmpeg.detection as dt
-    dt._BEST_ENCODER_CACHE = None
-    with patch("src.ffmpeg.detection._test_encoder") as mock_test:
-        def _mock_test_impl(name, *args, **kwargs):
-            return name in ("hevc_amf", "h264_amf")
-        mock_test.side_effect = _mock_test_impl
-
-        # detect_best_encoder should detect amd
-        with patch("subprocess.run") as mock_run:
-            mock_res = MagicMock()
-            mock_res.returncode = 0
-            mock_res.stdout = " V....D hevc_amf\n V....D h264_amf\n"
-            mock_run.return_value = mock_res
-            best = detect_best_encoder()
-            assert best == "amd"
+    """AUTO uses the canonical capability snapshot, including multi-GPU priority."""
+    from src.ffmpeg_pipeline import detect_best_encoder
+    from src.ffmpeg.backend_capabilities import BackendCapabilities
+    with patch("src.ffmpeg.backend_capabilities.query_backend_capabilities") as query:
+        query.return_value = BackendCapabilities(amd_available=True, nvidia_available=False)
+        assert detect_best_encoder() == "amd"
+        query.return_value = BackendCapabilities(amd_available=True, nvidia_available=True)
+        assert detect_best_encoder() == "nv"
 
 
 def test_smart_canvas_scaling_filter_cmd():
@@ -271,7 +262,7 @@ def test_intel_and_cpu_pipeline_unchanged():
         encoder="intel", rotation_degrees=180, **base_kwargs,
     )
     assert "hevc_qsv" in intel_cmd
-    assert intel_cmd[intel_cmd.index("-pix_fmt", intel_cmd.index("-c:v")) + 1] == "nv12"
+    assert intel_cmd[intel_cmd.index("-pix_fmt", intel_cmd.index("-c:v")) + 1] == "p010le"
     assert _encoder_args(intel_cmd) == _encoder_args(intel_cmd_r)
     assert "overlay_cuda" not in intel_fc_r
     assert "hwdownload" in intel_fc_r

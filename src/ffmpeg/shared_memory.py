@@ -155,6 +155,21 @@ def _close_shm_in_worker() -> None:
 
 
 _TRACE_FIRST_JOB_DONE = False
+_WIDGET_AUDIT: dict = {"jobs": 0, "sums": {}}
+
+
+def _accumulate_widget_audit(breakdown: dict) -> None:
+    """Diagnostics only: mean per-widget render cost in this worker."""
+    _WIDGET_AUDIT["jobs"] += 1
+    sums = _WIDGET_AUDIT["sums"]
+    for key, value in breakdown.items():
+        if isinstance(value, (int, float)) and (key.endswith(".total") or key.endswith("_ms")):
+            sums[key] = sums.get(key, 0.0) + float(value)
+    if _WIDGET_AUDIT["jobs"] % 200 == 0:
+        import json
+        n = _WIDGET_AUDIT["jobs"]
+        means = {k: round(v / n, 3) for k, v in sorted(sums.items(), key=lambda kv: -kv[1])}
+        print(f"[HUD WIDGET COST] pid={os.getpid()} jobs={n} mean_ms={json.dumps(means)}", flush=True)
 
 
 class WorkerInitBlob:
@@ -183,6 +198,25 @@ class WorkerInitBlob:
             pass
         self._shm = None
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+
+
+def _init_worker_with_prepared_blob(blob_name, blob_size, shm_names, frame_size):
+    import pickle
+    blob = shared_memory.SharedMemory(name=blob_name)
+    try:
+        payload = pickle.loads(bytes(blob.buf[:blob_size]))
+    finally:
+        blob.close()
+    _init_worker_with_shm(shm_names, frame_size, *payload["init_args"])
+    from src.project_preparation import install_export_map_seed, enter_worker_export_phase
+    install_export_map_seed(payload["map_seed"])
+    enter_worker_export_phase("prepared_hud_worker")
+
 
 def _init_worker_with_shm_blob(
     blob_name: str, blob_size: int, shm_names: list[str], frame_size: int,
@@ -195,6 +229,116 @@ def _init_worker_with_shm_blob(
     finally:
         blob.close()
     _init_worker_with_shm(shm_names, frame_size, *init_worker_args)
+
+
+class LateSeedChannel:
+    """One pickled object published to spawned workers after they started.
+
+    Lets HUD workers boot while the parent is still fetching start-up data.
+    Layout: byte 0 = ready flag, bytes 8..16 = payload length, then payload.
+    Publishing ``None`` (or an oversized payload) releases waiting workers
+    without data, so a failed fetch never costs more than a normal start.
+    """
+
+    _HEADER = 16
+
+    def __init__(self, capacity: int) -> None:
+        self.capacity = max(self._HEADER + 1, int(capacity))
+        self._shm = shared_memory.SharedMemory(create=True, size=self.capacity)
+        self._shm.buf[:self._HEADER] = bytes(self._HEADER)
+        self.name = self._shm.name
+        self.published_bytes = 0
+
+    def publish(self, obj: Any) -> None:
+        import pickle
+        if self._shm is None or self._shm.buf[0]:
+            return
+        payload = b"" if obj is None else pickle.dumps(obj, protocol=pickle.HIGHEST_PROTOCOL)
+        if len(payload) > self.capacity - self._HEADER:
+            payload = b""
+        self._shm.buf[self._HEADER:self._HEADER + len(payload)] = payload
+        self._shm.buf[8:16] = len(payload).to_bytes(8, "little")
+        self._shm.buf[0] = 1  # written last: readers see a complete payload
+        self.published_bytes = len(payload)
+
+    def close(self) -> None:
+        if self._shm is None:
+            return
+        try:
+            self._shm.close()
+            self._shm.unlink()
+        except Exception:
+            pass
+        self._shm = None
+
+
+def read_late_seed(name: str, timeout_s: float) -> Any:
+    """Worker side of ``LateSeedChannel``; returns ``None`` on timeout/no data."""
+    import pickle
+    try:
+        shm = shared_memory.SharedMemory(name=name, create=False)
+    except FileNotFoundError:
+        return None
+    try:
+        deadline = time.monotonic() + max(0.0, timeout_s)
+        while not shm.buf[0]:
+            if time.monotonic() >= deadline:
+                return None
+            time.sleep(0.005)
+        size = int.from_bytes(bytes(shm.buf[8:16]), "little")
+        if size <= 0:
+            return None
+        return pickle.loads(bytes(shm.buf[LateSeedChannel._HEADER:LateSeedChannel._HEADER + size]))
+    finally:
+        shm.close()
+
+
+def _init_worker_with_shm_blob_seeded(
+    blob_name: str, blob_size: int, shm_names: list[str], frame_size: int,
+    seed_channel_name: str | None = None, seed_wait_s: float = 0.0,
+) -> None:
+    """Blob initialiser for payload ``{"init_args": ..., "map_session_seed": ...}``.
+
+    ``map_session_seed`` is the project's prepared map imagery (memory only,
+    credential-bound).  The worker installs it and enters the export phase:
+    no network, unprepared tiles are contract violations.  ``seed_channel_name``
+    keeps the older late-channel hand-off available.
+    """
+    import pickle
+    blob = shared_memory.SharedMemory(name=blob_name, create=False)
+    try:
+        payload = pickle.loads(bytes(blob.buf[:blob_size]))
+    finally:
+        blob.close()
+    _init_worker_with_shm(shm_names, frame_size, *payload["init_args"])
+    if os.environ.get("TELEM_INTEL_WIDGET_CACHE", "0") == "1":
+        from src.indicators.dispatcher import enable_intel_output_cache
+        enable_intel_output_cache()
+    seed = payload.get("map_session_seed")
+    if seed_channel_name:
+        t_wait = time.perf_counter()
+        seed = read_late_seed(seed_channel_name, seed_wait_s)
+        if os.environ.get("TELEM_HUD_STARTUP_TRACE") == "1":
+            print(f"[HUD STARTUP TRACE] worker pid={os.getpid()} map_seed_wait_ms={(time.perf_counter() - t_wait) * 1000.0:.1f}", flush=True)
+    _enter_intel_worker_export(seed)
+
+
+def _enter_intel_worker_export(seed) -> None:
+    from src.project_preparation import enter_worker_export_phase, install_export_map_seed
+    t_seed = time.perf_counter()
+    installed = install_export_map_seed(seed)
+    print(f"[HUD MAP PREPARED] worker pid={os.getpid()} tiles={installed}/{len((seed or {}).get('tiles', {}))} "
+          f"install_ms={(time.perf_counter() - t_seed) * 1000.0:.1f}", flush=True)
+    WORKER_CACHE["_intel_draw_bounds"] = True
+    enter_worker_export_phase("intel_hud_worker")
+
+
+def _init_intel_worker_with_shm(shm_names, frame_size, init_args, map_session_seed=None):
+    _init_worker_with_shm(shm_names, frame_size, *init_args)
+    if os.environ.get("TELEM_INTEL_WIDGET_CACHE", "0") == "1":
+        from src.indicators.dispatcher import enable_intel_output_cache
+        enable_intel_output_cache()
+    _enter_intel_worker_export(map_session_seed)
 
 
 def _init_worker_with_shm(
@@ -233,10 +377,17 @@ def render_frame_shm_job(job: tuple) -> tuple[int, int]:
     Returns:
         (frame_index, shm_slot_id) — only ~50 bytes through pickle.
     """
-    index, slot = job[:2]
+    output_index, slot = job[:2]
+    index = output_index + (int(job[4]) if len(job) >= 5 else 0)
     if os.environ.get("TELEM_INTEL_FROZEN_HUD") == "1" and index > 0:
-        return index, slot
+        return output_index, slot
     audit_enabled = len(job) >= 3 and bool(job[2])
+    # Optional 4th element: this frame's precomputed telemetry record, for a
+    # worker cache initialised without records (progressive Intel cache).
+    job_record_cache = None
+    if len(job) >= 4 and job[3] is not None:
+        job_record_cache = WORKER_CACHE.get("_telemetry_cache")
+        job_record_cache.records[index] = job[3]
     if audit_enabled:
         worker_started_ns = time.perf_counter_ns()
     start_dt_utc = WORKER_CACHE.get("start_dt_utc")
@@ -249,6 +400,8 @@ def render_frame_shm_job(job: tuple) -> tuple[int, int]:
     import numpy as np
     shm_buf = _SHM_BLOCKS[slot].buf
     layout = WORKER_CACHE.get("layout", {})
+    from src.project_preparation import contract as _prepare_contract
+    map_misses_before = _prepare_contract.map_misses()
     hud_regions = WORKER_CACHE.get("hud_regions")
     zero_copy_requested = os.environ.get("TELEM_ZERO_COPY_SHM", "1").strip().lower() not in {
         "0", "false", "no", "off"
@@ -301,7 +454,22 @@ def render_frame_shm_job(job: tuple) -> tuple[int, int]:
             zero_copy_target = None
             zero_copy = False
 
+    paint_bounds = {} if WORKER_CACHE.get("_intel_draw_bounds") else None
     breakdown = {} if audit_enabled else None
+    widget_audit = os.environ.get("TELEM_INTEL_HUD_WIDGET_AUDIT") == "1"
+    if widget_audit:
+        breakdown = {}
+    startup_trace = os.environ.get("TELEM_HUD_STARTUP_TRACE") == "1" and index < 4
+    if startup_trace:
+        breakdown = {}
+        print(f"[HUD FIRST COMPOSE BEGIN] pid={os.getpid()} frame={index} epoch={time.time():.6f}",flush=True)
+    # Measurement-only: profile the first compose per worker (opt-in env).
+    start_profile_dir = os.environ.get("TELEM_START_PROFILE_DIR") if startup_trace else None
+    start_profiler = None
+    if start_profile_dir:
+        import cProfile
+        start_profiler = cProfile.Profile()
+        start_profiler.enable()
     if audit_enabled:
         worker_render_started_ns = time.perf_counter_ns()
     try:
@@ -311,6 +479,7 @@ def render_frame_shm_job(job: tuple) -> tuple[int, int]:
             target_fps, update_rate_step,
             target_image=zero_copy_target,
             breakdown=breakdown,
+            paint_bounds=paint_bounds,
         )
     except Exception:
         if not zero_copy:
@@ -326,9 +495,23 @@ def render_frame_shm_job(job: tuple) -> tuple[int, int]:
             target_fps, update_rate_step,
             target_image=None,
             breakdown=breakdown,
+            paint_bounds=paint_bounds,
         )
     if audit_enabled:
         worker_render_finished_ns = time.perf_counter_ns()
+    if job_record_cache is not None:
+        job_record_cache.records.pop(index, None)
+    if _prepare_contract.export_active and _prepare_contract.map_misses() != map_misses_before:
+        # Never hand a frame with grey (unprepared) map cells to the encoder.
+        raise RuntimeError(f"Map export: frame {index} needs map tiles that were not prepared with the project")
+    if widget_audit and breakdown is not None and index >= 30:
+        _accumulate_widget_audit(breakdown)
+    if start_profiler is not None:
+        start_profiler.disable()
+        start_profiler.dump_stats(os.path.join(start_profile_dir, f"worker_{os.getpid()}_frame{index}.prof"))
+    if startup_trace:
+        import json
+        print(f"[HUD FIRST COMPOSE END] pid={os.getpid()} frame={index} epoch={time.time():.6f} breakdown={json.dumps(breakdown)}",flush=True)
 
     if zero_copy:
         # No PIL->NumPy conversion and no full-atlas memcpy in this branch.
@@ -374,4 +557,6 @@ def render_frame_shm_job(job: tuple) -> tuple[int, int]:
             shm_copy_finished_ns, clear_started_ns, clear_finished_ns,
             zero_copy, breakdown,
         )
-    return index, slot
+    if paint_bounds is not None:
+        return output_index, slot, paint_bounds
+    return output_index, slot

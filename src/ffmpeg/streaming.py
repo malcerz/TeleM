@@ -36,6 +36,7 @@ from src.ffmpeg.intel_backend import (
 from src.ffmpeg.worker_cache import init_worker
 from src.ffmpeg.command_builder import (
     _build_stream_ffmpeg_cmd,
+    _fps_rational_arg,
     build_text_bbox_context,
     get_layout_hud_bbox,
     get_layout_hud_regions,
@@ -554,6 +555,11 @@ def _pipe_writer_thread(
         # already enqueued before exiting (sentinel None, or empty queue after
         # done_event).  Queued frames are discarded ONLY when an explicit
         # cancel/error requested it via discard_pending (ETAP 5B tail-loss fix).
+        # Measurement only (CPU P0.4 Golden HUD): TELEM_CPU_DIAG_DUMP_FRAMES="150,200"
+        # and TELEM_CPU_DIAG_DUMP_DIR dump those pre-compression RGBA frames.
+        _dump_dir = os.environ.get("TELEM_CPU_DIAG_DUMP_DIR", "").strip()
+        _dump_set = {int(x) for x in os.environ.get("TELEM_CPU_DIAG_DUMP_FRAMES", "").split(",")
+                     if x.strip().isdigit()} if _dump_dir else set()
         try:
             while True:
                 if discard_pending is not None and discard_pending.is_set():
@@ -576,6 +582,9 @@ def _pipe_writer_thread(
                     if isinstance(item, tuple):
                         slot, memview = item[:2]
                         try:
+                            if _dump_set and writer_stats is not None and writer_stats["frames_written"] in _dump_set:
+                                with open(os.path.join(_dump_dir, f"export_hud_f{writer_stats['frames_written']}.rgba"), "wb") as _f:
+                                    _f.write(memview)
                             stdin_buffer.write(memview)
                         finally:
                             try:
@@ -594,6 +603,8 @@ def _pipe_writer_thread(
                             writer_stats["first_frame_time"] = now
                         writer_stats["last_frame_time"] = now
                         writer_stats["frames_written"] += 1
+                        if "frame_times" in writer_stats:
+                            writer_stats["frame_times"].append(now)
         except (BrokenPipeError, OSError):
             if writer_failed is not None:
                 writer_failed.set()
@@ -689,6 +700,8 @@ def _pipe_writer_thread(
                         writer_stats["first_frame_time"] = now
                     writer_stats["last_frame_time"] = now
                     writer_stats["frames_written"] += 1
+                    if "frame_times" in writer_stats:
+                        writer_stats["frame_times"].append(now)
     except (BrokenPipeError, OSError):
         if writer_failed is not None:
             writer_failed.set()
@@ -903,45 +916,79 @@ def resolve_hud_resolution_policy(
     - Manual 75% (0.75) -> 0.75
     - Manual 50% (0.5) -> 0.5
     - Auto (or default):
-      - If encoder == "intel" and (render_w, render_h) == (3840, 2160):
-        -> 0.75 (2560x1440 scaled HUD, validated in ETAP 6B with +41.7% speedup)
-      - Otherwise (non-4K Intel, AMD, NVIDIA, CPU):
-        -> 1.0 (reference native canvas)
+      - If encoder is NVIDIA and 4K (3840x2160) -> 0.5 (Smart Canvas 1920x1080)
+      - If encoder is NVIDIA and >1920 -> scale down to 1920 width
+      - If encoder is Intel and 4K (3840x2160) -> 0.75 (2560x1440)
+      - Otherwise (non-4K Intel, AMD, CPU) -> 1.0 (reference native canvas)
     - Fallback: 1.0 if unrecognized.
     """
+    enc_norm = str(encoder or "").strip().lower()
+    is_nv = enc_norm in ("nv", "nvidia", "cuda", "nvenc")
+    is_intel = enc_norm in ("intel", "qsv", "quicksync")
+    vendor_tag = "NVIDIA" if is_nv else ("INTEL" if is_intel else enc_norm.upper())
+
     try:
         if isinstance(user_option, (int, float)):
             if abs(user_option - 0.75) < 1e-4:
-                return 0.75, "[INTEL] HUD resolution policy: MANUAL 75%" if encoder == "intel" else ""
+                return 0.75, f"[{vendor_tag}] HUD resolution policy: MANUAL 75%" if (is_intel or is_nv) else ""
             if abs(user_option - 0.5) < 1e-4:
-                return 0.5, "[INTEL] HUD resolution policy: MANUAL 50%" if encoder == "intel" else ""
+                return 0.5, f"[{vendor_tag}] HUD resolution policy: MANUAL 50%" if (is_intel or is_nv) else ""
             if abs(user_option - 1.0) < 1e-4:
-                return 1.0, "[INTEL] HUD resolution policy: MANUAL 100%" if encoder == "intel" else ""
+                return 1.0, f"[{vendor_tag}] HUD resolution policy: MANUAL 100%" if (is_intel or is_nv) else ""
 
         opt_str = str(user_option).strip() if user_option is not None else "Auto"
         if opt_str == "75%":
-            return 0.75, "[INTEL] HUD resolution policy: MANUAL 75%" if encoder == "intel" else ""
+            return 0.75, f"[{vendor_tag}] HUD resolution policy: MANUAL 75%" if (is_intel or is_nv) else ""
         if opt_str == "50%":
-            return 0.5, "[INTEL] HUD resolution policy: MANUAL 50%" if encoder == "intel" else ""
+            return 0.5, f"[{vendor_tag}] HUD resolution policy: MANUAL 50%" if (is_intel or is_nv) else ""
         if opt_str == "100%":
-            return 1.0, "[INTEL] HUD resolution policy: MANUAL 100%" if encoder == "intel" else ""
+            return 1.0, f"[{vendor_tag}] HUD resolution policy: MANUAL 100%" if (is_intel or is_nv) else ""
 
         # Auto mode
         if opt_str in ("Auto", "auto", ""):
-            if encoder == "nv" and render_w == 3840 and render_h == 2160:
+            if is_nv and render_w == 3840 and render_h == 2160:
                 return 0.5, f"[NVIDIA] HUD resolution policy: AUTO -> 50% (1920x1080 -> {render_w}x{render_h})"
-            elif encoder == "nv" and render_w > 1920:
+            elif is_nv and render_w > 1920:
                 scale = 1920.0 / render_w
                 return scale, f"[NVIDIA] HUD resolution policy: AUTO -> {scale*100:.1f}% (Smart Canvas -> {render_w}x{render_h})"
-            elif encoder == "intel" and render_w == 3840 and render_h == 2160:
+            elif is_intel and render_w == 3840 and render_h == 2160:
                 return 0.75, f"[INTEL] HUD resolution policy: AUTO -> 75% (2560x1440 -> {render_w}x{render_h})"
-            elif encoder == "intel":
+            elif is_intel:
                 return 1.0, f"[INTEL] HUD resolution policy: AUTO -> 100% ({render_w}x{render_h})"
             else:
                 return 1.0, ""
     except Exception:
         pass
-    return 1.0, "[INTEL] HUD resolution policy: FALLBACK 100%" if encoder == "intel" else ""
+    return 1.0, f"[{vendor_tag}] HUD resolution policy: FALLBACK 100%" if (is_intel or is_nv) else ""
+
+
+def resolve_effective_hud_dimensions(
+    encoder: str,
+    render_w: int,
+    render_h: int,
+    user_option: Any = "Auto",
+) -> tuple[int, int, float, str]:
+    """Resolve effective overlay dimensions (ov_w, ov_h), scale, and policy message."""
+    hud_resolution_scale, policy_msg = resolve_hud_resolution_policy(
+        encoder=encoder,
+        render_w=render_w,
+        render_h=render_h,
+        user_option=user_option,
+    )
+    if render_w == 3840 and render_h == 2160 and abs(hud_resolution_scale - 0.75) < 1e-4:
+        ov_w = 2560
+        ov_h = 1440
+    elif render_w == 3840 and render_h == 2160 and abs(hud_resolution_scale - 0.5) < 1e-4:
+        ov_w = 1920
+        ov_h = 1080
+    else:
+        ov_w = max(2, int(round(render_w * hud_resolution_scale)))
+        ov_h = max(2, int(round(render_h * hud_resolution_scale)))
+    if ov_w % 2:
+        ov_w += 1
+    if ov_h % 2:
+        ov_h += 1
+    return ov_w, ov_h, hud_resolution_scale, policy_msg
 
 
 def resolve_amd_gui_range_plan(
@@ -1026,6 +1073,7 @@ def stream_overlay_to_ffmpeg(
     nvidia_quality: str = "Fast",
     enable_compression_analysis: bool = False,
     max_frames: Optional[int] = None,
+    start_frame: int = 0,
     codec: str = "av1",
     encoder_profile: str = "balanced",
     **kwargs: Any,
@@ -1093,6 +1141,7 @@ def stream_overlay_to_ffmpeg(
 
     phase_t0 = time.time()
     cut_regions = layout.get("cut_regions", [])
+    prepared_export = kwargs.get("prepared_hud_provider")
 
     # AMD native consumes a clip-aware VideoTimeline directly.  Convert the
     # GUI's canonical excluded regions to retained source-local clip ranges
@@ -1126,6 +1175,10 @@ def stream_overlay_to_ffmpeg(
         )
 
     generation_fps = target_fps / update_rate_step
+    cpu_start_frame = max(0, int(start_frame)) if encoder == "cpu" else 0
+    if cpu_start_frame and (update_rate_step != 1 or cut_regions or
+                            (isinstance(input_files, list) and len(input_files) != 1)):
+        raise ValueError("CPU start_frame requires a single source without cuts and Full HUD rate")
     if video_timeline is not None and getattr(video_timeline, "clip_count", 0):
         output_frames = video_timeline.output_frame_count(target_fps)
         total_overlay_frames = max(
@@ -1134,6 +1187,13 @@ def stream_overlay_to_ffmpeg(
         duration_s = output_frames / target_fps
     else:
         total_overlay_frames = max(1, math.ceil(duration_s * generation_fps))
+    if cpu_start_frame:
+        total_overlay_frames -= cpu_start_frame
+        if total_overlay_frames <= 0:
+            raise ValueError("CPU start_frame is outside the source")
+    # An IN/OUT view of the prepared HUD has only the retained frames.
+    if cut_regions and getattr(prepared_export, "frame_index_map", None):
+        total_overlay_frames = min(total_overlay_frames, prepared_export.frames)
 
     env_max = os.environ.get("TELEM_MAX_FRAMES")
     if env_max and env_max.isdigit() and int(env_max) > 0:
@@ -1367,14 +1427,12 @@ def stream_overlay_to_ffmpeg(
                     print("[INTEL_NATIVE_RESULT] success=NO (cancelled)", flush=True)
                     return 0
                 print("[INTEL_NATIVE_RESULT] success=NO", flush=True)
-                fallback_reason = "export_intel_native_d3d11 returned False"
-                print(f"[INTEL_NATIVE_FALLBACK_REASON] {fallback_reason}", flush=True)
+                raise RuntimeError("Intel Native nie ukończył eksportu; automatyczna zmiana ścieżki jest wyłączona")
             except Exception as e:
                 import traceback
                 print(f"[INTEL_NATIVE_EXCEPTION] {type(e).__name__}: {e}\n{traceback.format_exc()}", flush=True)
                 print("[INTEL_NATIVE_RESULT] success=NO (exception)", flush=True)
-                fallback_reason = f"export_intel_native_d3d11 raised {type(e).__name__}: {e}"
-                print(f"[INTEL_NATIVE_FALLBACK_REASON] {fallback_reason}", flush=True)
+                raise
 
         print(f"[INTEL_FFMPEG_FALLBACK_ENTERED] entered=YES reason={fallback_reason}", flush=True)
 
@@ -1459,6 +1517,7 @@ def stream_overlay_to_ffmpeg(
                     codec=kwargs.get("amd_codec", codec),
                     quality=kwargs.get("amd_encoder_quality", encoder_profile),
                     amd_hdr_mode=kwargs.get("amd_hdr_mode"),
+                    prepared_hud_provider=kwargs.get("prepared_hud_provider"),
                 )
             except AMDNativeFinalizationError as exc:
                 # Storage/finalization failure is not a renderer capability
@@ -1703,10 +1762,18 @@ def stream_overlay_to_ffmpeg(
 
     effective_rotation = container_rotation if container_rotation != 0 else rotation_degrees
     nv_rot180_cuda = is_nv_rot180_cuda(encoder, rotation_degrees, container_rotation)
+    cpu_rot180_metadata = encoder == "cpu" and container_rotation % 360 == 180
+    hud_rot180 = nv_rot180_cuda or cpu_rot180_metadata
     t_worker_init_start = time.perf_counter()
     t_prep_end = t_worker_init_start
+    from src.prepared_hud_frames import HUDNotReady
+    provider = kwargs.get("prepared_hud_provider")
+    if provider is None or provider.frames < total_overlay_frames + cpu_start_frame or abs(provider.fps - target_fps) > .001:
+        raise HUDNotReady("NOT READY: brak gotowych klatek HUD")
+    prepared_cut_view = bool(getattr(provider, "frame_index_map", None))
+    worker_layout = dict(layout, cut_regions=[]) if prepared_cut_view else layout
     init_worker(
-        overlay_w, overlay_h, font_path, layout, field_samples, max_distance_m,
+        overlay_w, overlay_h, font_path, worker_layout, field_samples, max_distance_m,
         iso_samples, exposure_samples, temperature_samples,
         gpx_speed_samples, gpx_track_samples, gpx_alt_samples,
         gpx_power_samples, gpx_atemp_samples, gpx_hr_samples, gpx_cad_samples,
@@ -1715,12 +1782,14 @@ def stream_overlay_to_ffmpeg(
         start_dt_utc, tz_offset_hours,
         speed_samples, track_samples, alt_samples,
         target_fps, update_rate_step, total_overlay_frames,
-        cut_regions=cut_regions,
+        cut_regions=[] if prepared_cut_view else cut_regions,
         effective_rotation=effective_rotation,
         hud_bbox=hud_bbox,
         hud_regions=hud_regions,
-        hud_rotate_180=nv_rot180_cuda,
+        hud_rotate_180=hud_rot180,
         video_timeline=video_timeline,
+        telemetry_cache=provider.cache,
+        skip_chart_build=True,
     )
     prep_tracker.complete_phase("worker_init")
     prep_tracker.start_phase("map_preload", items_total=1)
@@ -1782,6 +1851,8 @@ def stream_overlay_to_ffmpeg(
         input_args.extend(["-f", "concat", "-safe", "0", "-i", str(concat_txt)])
     else:
         input_file = input_files[0] if isinstance(input_files, list) else input_files
+        if cpu_start_frame:
+            input_args.extend(["-ss", f"{cpu_start_frame / target_fps:.9f}"])
         if container_rotation != 0 and encoder != "intel":
             # ETAP 5D rotation contract: the Intel pipeline relies on FFmpeg
             # autorotate (display matrix applied at decode) and does NOT bake
@@ -1803,11 +1874,38 @@ def stream_overlay_to_ffmpeg(
             print("[NVIDIA] ROT180 CPU FALLBACK", flush=True)
 
     is_10bit_source = False
+    cpu_color_range = ""
     first_input = (input_files if isinstance(input_files, (str, Path)) else (input_files[0] if input_files else None))
     if encoder == "nv" and first_input:
         is_10bit_source = (_probe_intel_cpu_download_format(str(first_input), ffmpeg_exe) == "p010le")
         if is_10bit_source:
             print(f"[NVIDIA] Detected 10-bit HDR source: {first_input}", flush=True)
+    elif encoder == "cpu" and first_input:
+        from src.ffmpeg.hdr_color import probe_video_color
+        color = probe_video_color(str(first_input), ffmpeg_exe)
+        if color.reason.startswith("ffprobe"):
+            raise ValueError(f"Cannot establish CPU input color format: {color.reason}")
+        if color.is_hlg:
+            if color.bit_depth < 10 or color.color_primaries != "bt2020" or color.color_space != "bt2020nc":
+                raise ValueError(f"Unsupported HLG input for CPU preservation: {color.summary()}")
+            is_10bit_source = True
+            cpu_color_range = color.color_range
+            for path in (input_files[1:] if isinstance(input_files, list) else []):
+                other = probe_video_color(str(path), ffmpeg_exe)
+                if (not other.is_hlg or other.bit_depth < 10 or
+                    (other.color_primaries, other.color_space, other.color_range) !=
+                    (color.color_primaries, color.color_space, color.color_range)):
+                    raise ValueError(f"Incompatible HLG input in CPU sequence: {other.summary()}")
+            print(f"[CPU] Preserving HLG Main10: {color.summary()}", flush=True)
+
+    _nv_preview_session = kwargs.get("_nvidia_cuda_preview_session") or kwargs.get("nvidia_preview_session")
+    if _nv_preview_session is not None:
+        effective_rot = container_rotation if container_rotation != 0 else rotation_degrees
+        _nv_preview_session.rotation = int(effective_rot)
+    _nv_prev_port = getattr(_nv_preview_session, "port", None) if (_nv_preview_session and _nv_preview_session.is_enabled()) else None
+    _nv_prev_fps = getattr(_nv_preview_session, "target_fps", 2.0)
+    _nv_prev_w = getattr(_nv_preview_session, "width", 960)
+    _nv_prev_h = getattr(_nv_preview_session, "height", 540)
 
     cmd, filter_complex = _build_stream_ffmpeg_cmd(
         ffmpeg_exe, input_args, output_file,
@@ -1834,9 +1932,27 @@ intel_codec=(intel_resolution.selected_codec if encoder == "intel" else "hevc"),
         enable_compression_analysis=False,
         is_10bit=is_10bit_source,
         max_frames=max_frames,
+        cpu_output_duration_s=(min(float(max_frames) / target_fps, duration_s - cpu_start_frame / target_fps)
+                               if encoder == "cpu" and max_frames else None),
+        cpu_color_range=cpu_color_range,
         intel_output_duration_s=(min(duration_s, total_overlay_frames / generation_fps) if encoder == "intel" else None),
         intel_encoder_profile=encoder_profile,
+        cpu_rate_mode=str(kwargs.get("cpu_rate_mode") or "crf"),
+        nvidia_preview_port=_nv_prev_port,
+        nvidia_preview_fps=_nv_prev_fps,
+        nvidia_preview_w=_nv_prev_w,
+        nvidia_preview_h=_nv_prev_h,
     )
+    if encoder == "cpu" and os.environ.get("TELEM_CPU_HARNESS_TRACE") == "1":
+        cmd[cmd.index("-loglevel") + 1] = "verbose"
+    if encoder == "cpu" and os.environ.get("TELEM_CPU_DIAG_NULL_SINK") == "1":
+        # Measurement only (CPU P0.2 variant C): same HUD workers, SHM and pipe
+        # transport, but FFmpeg only discards the RGBA frames (no decode/x265).
+        cmd = [
+            ffmpeg_exe, "-y", "-nostats", "-loglevel", "error", "-progress", "pipe:1",
+            "-f", "rawvideo", "-pix_fmt", "rgba", "-s", f"{stream_w}x{stream_h}",
+            "-r", _fps_rational_arg(generation_fps), "-i", "pipe:0", "-f", "null", "-",
+        ]
 
     print("FFmpeg streaming cmd:", " ".join(map(str, cmd)), flush=True)
     print(
@@ -2100,8 +2216,17 @@ intel_codec=(intel_resolution.selected_codec if encoder == "intel" else "hevc"),
     if workers is None:
         if encoder == "nv":
             workers = max(1, min(4, cpu_n))
+        elif encoder == "cpu":
+            # CPU P0.2/P0.4: libx265 is the bottleneck, so more Pillow workers only
+            # steal cores from x265 and cost RAM/SHM.  Measured on 8C/16T (2 vs 4
+            # workers, all three profiles): equal FPS, 2 workers use ~1.3 GB less.
+            # HUD needs ~0.1 core-s/frame and encoder FPS scales with cores, so the
+            # count scales with logical CPUs (16 -> 2, 24 -> 3, 32 -> 4, cap 8).
+            workers = max(2, min(8, cpu_n // 8))
         else:
             workers = max(1, cpu_n - 1)
+    if encoder == "cpu" and os.environ.get("TELEM_CPU_WORKERS", "").strip().isdigit():
+        workers = max(1, int(os.environ["TELEM_CPU_WORKERS"]))  # measurement override
     n_workers = min(workers, total_overlay_frames)
 
     # Frame size in bytes: RGBA = 4 bytes per pixel
@@ -2128,6 +2253,8 @@ intel_codec=(intel_resolution.selected_codec if encoder == "intel" else "hevc"),
     writer_stats = {
         "first_frame_time": None, "last_frame_time": None, "frames_written": 0,
     }
+    if encoder == "cpu" and os.environ.get("TELEM_CPU_HARNESS_TRACE") == "1":
+        writer_stats["frame_times"] = []
     if pipeline_audit is not None:
         writer_stats.update({
             "idle_wait_ns": 0, "busy_write_ns": 0,
@@ -2178,7 +2305,7 @@ intel_codec=(intel_resolution.selected_codec if encoder == "intel" else "hevc"),
                 if cancel_event is not None and cancel_event.is_set():
                     _note_cancel()
                     break
-                _, raw_bytes = render_frame_bytes_job((i,))
+                _, raw_bytes = render_frame_bytes_job((i + cpu_start_frame,))
                 if not _put_frame(raw_bytes):
                     break
                 total_piped += 1
@@ -2188,198 +2315,23 @@ intel_codec=(intel_resolution.selected_codec if encoder == "intel" else "hevc"),
 
             shm_names = shm_pool.shm_names()
 
-            telemetry_cache = None
-            try:
-                from src.telemetry_precompute import build_telemetry_cache
-                from src.overlay_renderer import build_chart_data
-                from src.ffmpeg.worker_cache import _resolve_cache_value, _resolve_cache_samples
-
-                t_pre_start = time.perf_counter()
-                
-                # Precompute static ranges
-                _range_cache = {}
-                indic = layout.get("indicators", {})
-                dist_ind = indic.get("dist_visual") or indic.get("dist_text") or indic.get("fit_distance_text") or {}
-                dist_src = dist_ind.get("source", "fit" if "fit_distance_text" in indic else "gpmf")
-                distance_stream = resolve_distance_samples(
-                    dist_src,
-                    gpmf_track=track_samples,
-                    fit_data=fit_data,
-                    gpx_track=gpx_track_samples,
-                )
-                _range_cache["max_distance_m"] = distance_max_m(distance_stream)
-                spd_ind = indic.get("speed_visual") or indic.get("speed_text") or indic.get("fit_speed_text") or indic.get("fit_enhanced_speed_text") or {}
-                spd_src = spd_ind.get("source", "fit" if ("fit_speed_text" in indic or "fit_enhanced_speed_text" in indic) else "gpmf")
-                if spd_src == "gpx":
-                    spd_for_range = gpx_speed_samples
-                elif spd_src == "fit":
-                    spd_for_range = fit_data.get("speed", []) if fit_data else []
-                else:
-                    spd_for_range = speed_samples
-                if spd_for_range:
-                    spd_vals = [s for _, s in spd_for_range]
-                    _range_cache["max_speed_kmh"] = max(spd_vals) if spd_vals else None
-                else:
-                    _range_cache["max_speed_kmh"] = None
-
-                alt_ind = indic.get("alt_visual") or indic.get("alt_text") or indic.get("fit_altitude_text") or indic.get("fit_enhanced_altitude_text") or {}
-                alt_src = alt_ind.get("source", "fit" if ("fit_altitude_text" in indic or "fit_enhanced_altitude_text" in indic) else "gpmf")
-                if alt_src == "gpx":
-                    alt_for_range = gpx_alt_samples
-                elif alt_src == "fit":
-                    alt_for_range = fit_data.get("alt", []) if fit_data else []
-                else:
-                    alt_for_range = alt_samples
-                if alt_for_range:
-                    alts = [a for _, a in alt_for_range]
-                    _range_cache["min_alt"] = min(alts) if alts else None
-                    _range_cache["max_alt"] = max(alts) if alts else None
-                else:
-                    _range_cache["min_alt"] = None
-                    _range_cache["max_alt"] = None
-
-                duration_s = (total_overlay_frames / target_fps) if (total_overlay_frames and target_fps) else None
-                # ETAP 4B: with a multi-file timeline the telemetry/chart range
-                # is the REAL absolute end (max clip absolute_end), never
-                # start_dt_utc + project_duration (wrong with large gaps).
-                end_dt_utc = None
-                if video_timeline is not None and getattr(video_timeline, "clip_count", 0):
-                    end_dt_utc = timeline_absolute_end(video_timeline)
-                if end_dt_utc is None and start_dt_utc and duration_s:
-                    end_dt_utc = start_dt_utc + timedelta(seconds=duration_s)
-                source_ranges = {}
-                if fit_data:
-                    all_fit_pts = [s for s in fit_data.values() if s]
-                    if all_fit_pts:
-                        source_ranges["fit"] = (
-                            min(s[0][0] for s in all_fit_pts),
-                            max(s[-1][0] for s in all_fit_pts),
-                        )
-
-                def _get_src_samples(src_name: str) -> tuple[list, list, list]:
-                    if src_name == "gpx":
-                        return (gpx_speed_samples or [], gpx_track_samples or [], gpx_alt_samples or [])
-                    if src_name == "fit":
-                        fit_d = fit_data or {}
-                        return (
-                            fit_d.get("speed", []),
-                            resolve_distance_samples("fit", fit_data=fit_d),
-                            fit_d.get("alt", []),
-                        )
-                    return (speed_samples or [], track_samples or [], alt_samples or [])
-
-                def _resolve_stream_samples(field_name: str, source: str = "fit", indicator_key: str | None = None) -> list:
-                    if source == "fit":
-                        fit_d = fit_data or {}
-                        if field_name in ("distance", "dist", "track"):
-                            return resolve_distance_samples("fit", fit_data=fit_d)
-                        aliases = {
-                            "power": ("power", "curVpower"), "hr": ("hr", "heart_rate"),
-                            "cad": ("cad", "cadence"), "atemp": ("atemp", "temperature", "garmin_temperature"),
-                            "battery": ("battery", "battery_soc", "garmin_battery_percent", "battery_pct"),
-                            "garmin_battery_voltage": ("garmin_battery_voltage", "battery_voltage"),
-                            "garmin_battery_percent": ("garmin_battery_percent", "battery_level", "battery_pct", "battery"),
-                            "garmin_temperature": ("garmin_temperature", "device_temperature", "temperature"),
-                        }.get(field_name, (field_name,))
-                        for name in aliases:
-                            if fit_d.get(name):
-                                return list(fit_d[name])
-                        return []
-
-                    if source == "gpx":
-                        gpx_map = {
-                            "distance": gpx_track_samples,
-                            "speed": gpx_speed_samples, "alt": gpx_alt_samples, "altitude": gpx_alt_samples,
-                            "dist": gpx_track_samples, "track": gpx_track_samples, "power": gpx_power_samples,
-                            "atemp": gpx_atemp_samples, "hr": gpx_hr_samples, "cad": gpx_cad_samples,
-                        }
-                        return list(gpx_map.get(field_name, []) or [])
-                    if source == "gpmf":
-                        gpmf_map = {
-                            "distance": track_samples,
-                            "speed": speed_samples, "alt": alt_samples, "altitude": alt_samples,
-                            "dist": track_samples, "track": track_samples, "iso": iso_samples,
-                            "exposure": exposure_samples, "temperature": temperature_samples,
-                        }
-                        return list(gpmf_map.get(field_name, []) or [])
-                    return []
-
-                act_mapper = getattr(fit_data, "active_time_mapper", None) if fit_data else None
-                chart_data = build_chart_data(
-                    layout,
-                    _get_src_samples,
-                    _resolve_stream_samples,
-                    start_dt_utc=start_dt_utc, end_dt_utc=end_dt_utc,
-                    source_activity_ranges=source_ranges,
-                    active_time_mapper=act_mapper,
-                )
-
-                prep_tracker.start_phase("telemetry_cache", items_total=total_overlay_frames)
-                telemetry_cache = build_telemetry_cache(
-                    layout=layout,
-                    base_dt=start_dt_utc,
-                    tz_offset_hours=tz_offset_hours or 0.0,
-                    start_dt_utc=start_dt_utc,
-                    speed_samples=speed_samples or [],
-                    track_samples=track_samples or [],
-                    alt_samples=alt_samples or [],
-                    iso_samples=iso_samples or [],
-                    exposure_samples=exposure_samples or [],
-                    temperature_samples=temperature_samples or [],
-                    gpx_speed_samples=gpx_speed_samples or [],
-                    gpx_track_samples=gpx_track_samples or [],
-                    gpx_alt_samples=gpx_alt_samples or [],
-                    gpx_power_samples=gpx_power_samples or [],
-                    gpx_atemp_samples=gpx_atemp_samples or [],
-                    gpx_hr_samples=gpx_hr_samples or [],
-                    gpx_cad_samples=gpx_cad_samples or [],
-                    fit_data=fit_data,
-                    gps_track=gps_track,
-                    chart_data=chart_data,
-                    resolve_cache_value=_resolve_cache_value,
-                    _range_cache=_range_cache,
-                    total_frames=total_overlay_frames,
-                    target_fps=target_fps or 29.97,
-                    video_timeline=video_timeline,
-                    update_rate_step=update_rate_step,
-                    progress_cb=lambda done, tot, det: prep_tracker.update(done, tot, detail=det),
-                )
-                prep_tracker.complete_phase("telemetry_cache")
-                prep_tracker.start_phase("workers_setup", items_total=n_workers)
-                t_pre_build = time.perf_counter() - t_pre_start
-                stats = telemetry_cache.stats()
-                cache_mb = stats["memory_mib"]
-                n_fields = len(telemetry_cache.static.fit_keys) + len(telemetry_cache.static.dynamic_keys) + 8
-                if encoder == "nv":
-                    print(f"[NVIDIA] Telemetry mode: PRECOMPUTED", flush=True)
-                    print(f"[NVIDIA] Telemetry frames: {total_overlay_frames}", flush=True)
-                    print(f"[NVIDIA] Telemetry fields: {n_fields}", flush=True)
-                    print(f"[NVIDIA] Telemetry cache: {cache_mb:.2f} MB", flush=True)
-                    print(f"[NVIDIA] Telemetry precompute build: {t_pre_build:.3f} s", flush=True)
-                else:
-                    print(f"[STREAM] Telemetry mode: PRECOMPUTED ({total_overlay_frames} frames, {cache_mb:.2f} MB, {t_pre_build*1000:.1f} ms)", flush=True)
-            except Exception as exc:
-                if encoder == "nv":
-                    print(f"[NVIDIA] Telemetry precompute unavailable: {exc}", flush=True)
-                    print(f"[NVIDIA] Falling back to live telemetry resolver", flush=True)
-                else:
-                    print(f"[STREAM] Telemetry precompute unavailable: {exc} -> live resolver fallback", flush=True)
-                telemetry_cache = None
-
+            from src.prepared_hud_frames import HUDNotReady
+            provider = kwargs.get("prepared_hud_provider")
+            if provider is None or provider.frames < total_overlay_frames + cpu_start_frame or abs(provider.fps - target_fps) > .001:
+                raise HUDNotReady("NOT READY: eksport wymaga gotowego modelu klatek HUD")
+            telemetry_cache = provider.cache
+            worker_cache = telemetry_cache.worker_view()
             init_args = (
-                overlay_w, overlay_h, font_path, layout, field_samples, max_distance_m,
-                iso_samples, exposure_samples, temperature_samples,
-                gpx_speed_samples, gpx_track_samples, gpx_alt_samples,
-                gpx_power_samples, gpx_atemp_samples, gpx_hr_samples, gpx_cad_samples,
-                fit_data,
-                gps_track,
+                overlay_w, overlay_h, font_path, worker_layout, {}, max_distance_m,
+                None, None, None,
+                None, None, None,
+                None, None, None, None,
+                None, None,
                 start_dt_utc, tz_offset_hours,
-                speed_samples, track_samples, alt_samples,
+                None, None, None,
                 target_fps, update_rate_step, total_overlay_frames,
-                cut_regions, effective_rotation, hud_bbox, hud_regions,
-                nv_rot180_cuda,
-                telemetry_cache,
-                video_timeline,
+                [] if prepared_cut_view else cut_regions, effective_rotation, hud_bbox, hud_regions,
+                hud_rot180, worker_cache, video_timeline,
             )
 
             if encoder == "nv":
@@ -2397,10 +2349,17 @@ intel_codec=(intel_resolution.selected_codec if encoder == "intel" else "hevc"),
                 )
 
             prep_tracker.finish()
-            with _RenderExecutor(
+            from src.ffmpeg.shared_memory import WorkerInitBlob, _init_worker_with_prepared_blob
+            from src.project_preparation import export_map_seed, map_export_gate, media_window
+            map_ready, map_reason, map_reqs = map_export_gate(layout, gps_track or [], encoder, render_w,
+                media_window(video_timeline, start_dt_utc, duration_s),
+                hud_w=overlay_w)
+            if not map_ready:
+                raise HUDNotReady(map_reason)
+            with WorkerInitBlob({"init_args": init_args, "map_seed": export_map_seed(map_reqs)}) as blob, _RenderExecutor(
                 max_workers=n_workers,
-                initializer=_init_worker_with_shm,
-                initargs=(shm_names, frame_size, *init_args),
+                initializer=_init_worker_with_prepared_blob,
+                initargs=(blob.name, blob.size, shm_names, frame_size),
                 cancel_event=cancel_event,
             ) as ex:
                 pending: set = set()
@@ -2422,7 +2381,8 @@ intel_codec=(intel_resolution.selected_codec if encoder == "intel" else "hevc"),
                         pipeline_audit.mark(frame_index, "submit_started_ns", time.perf_counter_ns())
                     future = ex.submit(
                         render_frame_shm_job,
-                        (frame_index, slot_index, True) if pipeline_audit is not None else (frame_index, slot_index),
+                        (frame_index, slot_index, pipeline_audit is not None,
+                         telemetry_cache.record(frame_index + cpu_start_frame), cpu_start_frame),
                     )
                     if pipeline_audit is not None:
                         pipeline_audit.mark(frame_index, "job_submitted_ns", time.perf_counter_ns())
@@ -2675,9 +2635,13 @@ intel_codec=(intel_resolution.selected_codec if encoder == "intel" else "hevc"),
         pass
 
     rc = process.returncode
-    if rc != 0 and not (cancel_event is not None and cancel_event.is_set()):
+    is_cancelled = cancel_event is not None and cancel_event.is_set()
+    if rc != 0 and not is_cancelled:
         extra = "\n".join(stdout_lines).strip()
         raise RuntimeError(f"FFmpeg failed with exit code {rc}\n{extra}")
+
+    if is_cancelled:
+        return total_piped
 
     if isinstance(input_files, list) and len(input_files) > 1:
         concat_txt = Path(output_file).parent / "render_concat_list.txt"
@@ -2685,7 +2649,7 @@ intel_codec=(intel_resolution.selected_codec if encoder == "intel" else "hevc"),
             concat_txt.unlink()
 
     t_postprocess_start = time.perf_counter()
-    if nv_rot180_cuda:
+    if nv_rot180_cuda or cpu_rot180_metadata:
         # The local FFmpeg drops the display-matrix through overlay_cuda and
         # cannot write one via -metadata/-display_rotation, so inject the
         # rotation=180 display matrix into the video track's tkhd and verify it.
@@ -2704,6 +2668,28 @@ intel_codec=(intel_resolution.selected_codec if encoder == "intel" else "hevc"),
     frame_pipeline_time = (writer_stats["last_frame_time"] - writer_stats["first_frame_time"]) if (writer_stats["first_frame_time"] and writer_stats["last_frame_time"]) else (t_drain_start - t_ffmpeg_started)
     pipeline_fps = (total_overlay_frames / frame_pipeline_time) if frame_pipeline_time > 0 else 0.0
     real_export_fps = (total_overlay_frames / t_prod_total) if t_prod_total > 0 else 0.0
+    if encoder == "cpu" and active_process_holder is not None:
+        frame_times = writer_stats.get("frame_times", [])
+        lower = len(frame_times) // 10
+        upper = len(frame_times) - lower - 1
+        steady_window_s = frame_times[upper] - frame_times[lower] if upper > lower else 0.0
+        active_process_holder["cpu_stream_metrics"] = {
+            "stream_wall_s": t_prod_total,
+            "stream_prepare_s": t_prep_time,
+            "first_piped_frame_s": first_frame_lat,
+            "pipe_first_to_last_s": frame_pipeline_time,
+            "pipe_steady_fps": ((upper - lower) / steady_window_s if steady_window_s > 0 else None),
+            "pipe_steady_window_frames": [lower + 1, upper + 1] if steady_window_s > 0 else None,
+            "ffmpeg_drain_and_finalize_s": t_drain_time,
+            "metadata_finalize_s": t_postprocess_time,
+            "frames_written": writer_stats["frames_written"],
+        }
+        if os.environ.get("TELEM_CPU_HARNESS_TRACE") == "1":
+            active_process_holder["cpu_stream_metrics"]["filter_graph"] = filter_complex
+            active_process_holder["cpu_stream_metrics"]["ffmpeg_trace"] = [
+                line for line in stdout_lines if any(token in line for token in
+                    ("pixfmt:", "fmt:", "auto_scale", "Parsed_overlay", "x265 [info]", "encoded "))
+            ]
     total_overhead = max(0.0, t_prod_total - frame_pipeline_time)
     overhead_pct = (total_overhead / t_prod_total * 100.0) if t_prod_total > 0 else 0.0
 

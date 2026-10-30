@@ -42,7 +42,105 @@ from src.export_paths import legacy_default_export_dir, load_default_export_dir,
 from src.telemetry_compass_hybrid import hybrid_enabled
 
 
+
+def _start_mark(name: str) -> None:
+    """Opt-in start-up timeline marker (TELEM_HUD_STARTUP_TRACE=1); diagnostics only."""
+    if os.environ.get("TELEM_HUD_STARTUP_TRACE") == "1":
+        print(f"[START MARK] {name} qpc_s={time.perf_counter():.9f}", flush=True)
+
 class RenderMixin:
+    def _export_project_constants(self, ffprobe_exe: str) -> dict:
+        """Per-video constants an export reads, prepared once per loaded video.
+
+        Metadata records (rotation, legacy speed) and the container rotation
+        are read during project preparation; Start reuses them instead of
+        re-reading the GPMF JSON and probing the container again.
+        """
+        path = getattr(self, "video_path", None)
+        try:
+            stamp = (str(path), Path(path).stat().st_mtime_ns) if path else (None, None)
+        except OSError:
+            stamp = (str(path), None)
+        cached = getattr(self, "_export_constants_cache", None)
+        if cached is not None and cached[0] == stamp:
+            return cached[1]
+        records = self._export_metadata_records()
+        constants = {
+            "records": records,
+            "rotation_from_metadata": get_rotation_from_metadata(records) if records else None,
+            "container_rotation": get_container_rotation(ffprobe_exe, path) if path else 0,
+        }
+        self._export_constants_cache = (stamp, constants)
+        return constants
+
+    def _export_metadata_records(self) -> list:
+        """Camera metadata records an export reads (rotation, legacy speed)."""
+        metadata_candidates = []
+        if self.video_path:
+            try:
+                from src.telemetry_cache_manager import get_gpmf_json_path
+                cand = get_gpmf_json_path(self.video_path, create_dir=False)
+                if cand.exists():
+                    metadata_candidates.append(cand)
+            except Exception:
+                pass
+            metadata_candidates.append(self.video_path.with_suffix(".json"))
+        records = []
+        for metadata_path in metadata_candidates:
+            try:
+                records = ensure_records_list(load_json_with_fallback(metadata_path))
+                break
+            except Exception:
+                continue
+        return records
+
+    def _export_field_samples(self, layout: dict, speed: Any, track: Any, alt: Any) -> dict:
+        """HUD sample streams of an export (shared by Start and the project preparation)."""
+        compass_cfg = self.layout.get("indicators", {}).get("compass", {})
+        compass_hybrid_samples = None
+        if hybrid_enabled(compass_cfg):
+            compass_hybrid_samples = self.telemetry.prepare_compass(compass_cfg).samples
+        field_samples = {
+            "compass_hybrid_samples": compass_hybrid_samples,
+            "speed_samples": speed,
+            "track_samples": track,
+            "alt_samples": alt,
+            "heading_samples": getattr(self.telemetry, "heading_samples", None),
+            "gpx_heading_samples": getattr(self.telemetry, "gpx_heading_samples", None),
+            "slope_samples": getattr(self.telemetry, "slope_samples", None),
+            "gpx_slope_samples": getattr(self.telemetry, "gpx_slope_samples", None),
+            "iso_samples": getattr(self.telemetry, "iso_samples", None),
+            "exposure_samples": getattr(self.telemetry, "exposure_samples", None),
+            "temperature_samples": getattr(self.telemetry, "temperature_samples", None),
+            "accel_x_samples": getattr(self.telemetry, "accel_x_samples", None),
+            "accel_y_samples": getattr(self.telemetry, "accel_y_samples", None),
+            "accel_z_samples": getattr(self.telemetry, "accel_z_samples", None),
+            "accel_magnitude_samples": getattr(self.telemetry, "accel_magnitude_samples", None),
+            "gyro_x_samples": getattr(self.telemetry, "gyro_x_samples", None),
+            "gyro_y_samples": getattr(self.telemetry, "gyro_y_samples", None),
+            "gyro_z_samples": getattr(self.telemetry, "gyro_z_samples", None),
+            "gyro_magnitude_samples": getattr(self.telemetry, "gyro_magnitude_samples", None),
+            "accelerometer_array": getattr(self.telemetry, "accelerometer_array", None),
+            "gyroscope_array": getattr(self.telemetry, "gyroscope_array", None),
+        }
+        lean_timelines = {}
+        if hasattr(self.telemetry, "_get_lean_roll_samples"):
+            for k, cfg in (layout or {}).get("indicators", {}).items():
+                if isinstance(cfg, dict) and (cfg.get("form") == "lean" or k == "lean_indicator"):
+                    axis = str(cfg.get("axis", "x")).strip().lower()
+                    if axis not in ("x", "y", "z"):
+                        axis = "x"
+                    smooth_s = float(cfg.get("lean_smoothing_s", 0.0) or 0.0)
+                    try:
+                        tl = self.telemetry._get_lean_roll_samples(axis, smooth_s)
+                        if tl:
+                            lean_timelines[f"{axis}_{smooth_s:.2f}"] = tl
+                            lean_timelines[k] = tl
+                    except Exception:
+                        pass
+        field_samples["lean_timelines"] = lean_timelines
+        return field_samples
+
     def _resolve_render_output_path(self, output: str | Path) -> Path:
         """Resolve GUI and queue output names through the shared export policy."""
         output_path = sanitize_output_path(Path(output))
@@ -586,8 +684,20 @@ class RenderMixin:
                     queue.notify_render_started(job_id)
                 except Exception as _qe:
                     print(f"[Queue] notify_render_started error: {_qe}", flush=True)
+            # Measurement-only startup profile of the render thread (opt-in env).
+            start_profile_dir = os.environ.get("TELEM_START_PROFILE_DIR")
+            start_profiler = None
+            if start_profile_dir:
+                import cProfile
+                start_profiler = cProfile.Profile()
+                start_profiler.enable()
             try:
-                stats = self._render_pipeline(options)
+                try:
+                    stats = self._render_pipeline(options)
+                finally:
+                    if start_profiler is not None:
+                        start_profiler.disable()
+                        start_profiler.dump_stats(os.path.join(start_profile_dir, "render_thread.prof"))
                 if not isinstance(stats, dict):
                     stats = {}
                 monitor = getattr(self, "_active_storage_monitor", None)
@@ -608,7 +718,8 @@ class RenderMixin:
                     final_output = Path(options.get("_resolved_output_path") or options.get("output") or "")
                     ffprobe = self.ffprobe_exe or find_executable("ffprobe")
                     valid, duration, probe = validate_partial_output(
-                        ffprobe or "ffprobe", final_output, min_duration_s=0.0
+                        ffprobe or "ffprobe", final_output, min_duration_s=0.0,
+                        check_av_timing=options.get("encoder") == "cpu",
                     )
                     if not valid:
                         raise MuxError(
@@ -710,7 +821,60 @@ class RenderMixin:
                     primary_error = render_error.technical_message or str(e)
                 self._render_primary_error = primary_error
                 trace = traceback.format_exc()
+                # Gather comprehensive failure diagnostics (backend, DLL, HUD, map, FFmpeg mux)
+                diag_lines = [
+                    "=== [EXPORT FAILURE DIAGNOSTICS] ===",
+                    f"stage: {render_error.stage}",
+                    f"error_code: {render_error.code}",
+                    f"backend: {options.get('encoder', 'auto')} (nvidia_backend={options.get('nvidia_backend', '-')})",
+                    f"source_exception: {primary_error}",
+                ]
+                try:
+                    if str(options.get("encoder", "")).lower() in ("nv", "nvidia"):
+                        from src.ffmpeg.nvidia_config import get_native_dll_path
+                        _dll_p = get_native_dll_path().resolve()
+                        _dll_sha = hashlib.sha256(_dll_p.read_bytes()).hexdigest() if _dll_p.is_file() else "MISSING"
+                        diag_lines.append(f"dll_path: {_dll_p}")
+                        diag_lines.append(f"dll_sha256: {_dll_sha}")
+                except Exception as _dll_exc:
+                    diag_lines.append(f"dll_info_error: {_dll_exc}")
+                try:
+                    diag_lines.append(
+                        f"export_params: res={options.get('resolution')} fps={options.get('target_fps')} "
+                        f"codec={options.get('nvidia_codec') or options.get('amd_codec') or options.get('intel_codec')} "
+                        f"quality={options.get('nvidia_quality') or options.get('amd_encoder_quality') or options.get('encoder_profile')} "
+                        f"bitrate={options.get('bitrate')} start_frame={options.get('start_frame', 0)} "
+                        f"max_frames={options.get('max_frames')} cuts={len(getattr(self, '_cut_regions', ()) or ())}"
+                    )
+                except Exception:
+                    pass
+                try:
+                    _prov = getattr(self, "_prepared_hud_provider", None)
+                    _eprov = getattr(self, "_prepared_hud_export_provider", None)
+                    _hstate = getattr(self, "_hud_data_state", None)
+                    diag_lines.append(
+                        f"hud_state: state_dict={_hstate} "
+                        f"provider_frames={getattr(_prov, 'frames', None)} "
+                        f"export_provider_frames={getattr(_eprov, 'frames', None)} "
+                        f"native_states_path={getattr(_eprov or _prov, 'native_states_path', None)}"
+                    )
+                except Exception as _hud_exc:
+                    diag_lines.append(f"hud_state_error: {_hud_exc}")
+                try:
+                    from src.project_preparation import ProjectMapPreparation
+                    diag_lines.append(f"map_state: {ProjectMapPreparation.instance().snapshot()}")
+                except Exception:
+                    pass
+                try:
+                    _holder = getattr(self, "render_process_holder", None) or {}
+                    _proc = _holder.get("process")
+                    _mux_rc = _proc.poll() if _proc is not None and hasattr(_proc, "poll") else getattr(_proc, "returncode", None)
+                    diag_lines.append(f"ffmpeg_mux_state: pid={getattr(_proc, 'pid', None)} returncode={_mux_rc}")
+                except Exception:
+                    pass
+                diag_block = "\n".join(diag_lines)
                 print(f"[RENDER PRIMARY ERROR] {primary_error}", flush=True)
+                print(diag_block, flush=True)
                 print(f"[RENDER PRIMARY TRACEBACK]\n{trace}", flush=True)
                 explicit_cancel = getattr(self, "_render_cancel_reason", RenderCancelReason.NONE) is not RenderCancelReason.NONE
                 if not self.render_cancel_event.is_set() or storage_cancel or not explicit_cancel:
@@ -718,7 +882,7 @@ class RenderMixin:
                     if amd_log and Path(amd_log).is_file():
                         # GUI error message points at the log beside the MP4.
                         render_error.details["diagnostics_path"] = amd_log
-                    self._finish_export_log(options, "failed", f"{primary_error}\n{trace}")
+                    self._finish_export_log(options, "failed", f"{primary_error}\n{diag_block}\n{trace}")
                     emit_terminal_state("failed", error=True)
                     typed_signal = getattr(self.signals, "sig_render_error", None)
                     if typed_signal is not None:
@@ -779,31 +943,19 @@ class RenderMixin:
         """Wykonuje pipeline renderowania (istniejąca logika)."""
         # Capture candidate-specific metadata before encoder capability probes
         # or downstream export setup can touch temporary/legacy sidecars.
-        metadata_candidates = []
-        if self.video_path:
-            try:
-                from src.telemetry_cache_manager import get_gpmf_json_path
-                cand = get_gpmf_json_path(self.video_path, create_dir=False)
-                if cand.exists():
-                    metadata_candidates.append(cand)
-            except Exception:
-                pass
-            metadata_candidates.append(self.video_path.with_suffix(".json"))
-        records = []
-        for metadata_path in metadata_candidates:
-            try:
-                records = ensure_records_list(load_json_with_fallback(metadata_path))
-                break
-            except Exception:
-                continue
+        # Read once per video during project preparation (_export_project_constants).
+        records = None
 
+        _start_mark("pipeline_enter")
         from src.ffmpeg.backend_capabilities import (
             query_backend_capabilities,
             resolve_auto_backend,
             validate_backend_available,
         )
+        _start_mark("caps_begin")
         caps = query_backend_capabilities()
 
+        _start_mark("caps_end")
         requested_encoder = str(options.get("encoder", "auto")).strip().lower()
         if requested_encoder == "nvidia":
             requested_encoder = "nv"
@@ -878,6 +1030,8 @@ class RenderMixin:
         # Completion signals, queue updates, and finalization use this same path.
         options["output"] = str(output_path)
         output = str(output_path)
+        if not hasattr(self, "render_process_holder") or self.render_process_holder is None:
+            self.render_process_holder = {}
 
         # Universal export log beside the final MP4 (film.mp4 -> film.log). The queue
         # job snapshot wins; a direct export uses the current global setting.
@@ -903,8 +1057,24 @@ class RenderMixin:
                 output=output_path,
                 backend=str(encoder),
                 encoder=str(encoder),
-                codec=str(options.get("intel_codec") or options.get("amd_codec") or options.get("nvidia_codec") or options.get("codec") or "hevc"),
-                profile=str(options.get("encoder_profile") or options.get("amd_encoder_quality") or options.get("nvidia_quality") or options.get("profile") or "balanced"),
+                codec=str(
+                    (options.get("nvidia_codec") if encoder in ("nv", "nvidia") else None)
+                    or (options.get("amd_codec") if encoder in ("amd", "amd_native") else None)
+                    or options.get("intel_codec")
+                    or options.get("nvidia_codec")
+                    or options.get("amd_codec")
+                    or options.get("codec")
+                    or "hevc"
+                ),
+                profile=str(
+                    (options.get("nvidia_quality") if encoder in ("nv", "nvidia") else None)
+                    or (options.get("amd_encoder_quality") if encoder in ("amd", "amd_native") else None)
+                    or options.get("encoder_profile")
+                    or options.get("nvidia_quality")
+                    or options.get("amd_encoder_quality")
+                    or options.get("profile")
+                    or "balanced"
+                ),
                 job_id=str(options.get("_queue_job_id") or ""),
                 generation_id=int(options.get("_render_generation_id", 0) or 0),
                 mode="QUEUE" if options.get("_queue_job_id") else "DIRECT",
@@ -921,6 +1091,7 @@ class RenderMixin:
                 telemetry=getattr(self, "telemetry", None),
                 video_timeline=getattr(self, "video_timeline", None),
             )
+        _start_mark("export_log_end")
         print(
             f"[EXPORT LOG] enabled={logging_enabled} backend={encoder} "
             f"path={options['_export_log_path'] or '-'}",
@@ -944,6 +1115,7 @@ class RenderMixin:
             source_error.stage = "preflight_sources"
             raise source_error
 
+        _start_mark("preflight_sources_end")
         from src.ffmpeg.render_errors import preflight_export_storage, probe_export_storage_media
         storage_plan = preflight_export_storage(
             output_path, source_paths, options,
@@ -952,6 +1124,7 @@ class RenderMixin:
             timeline=getattr(self, "video_timeline", None),
             cut_regions=getattr(self, "_cut_regions", ()),
         )
+        _start_mark("storage_plan_end")
         options["_storage_plan"] = storage_plan
 
         def _storage_failure(free_bytes: int, reserve_bytes: int) -> None:
@@ -986,6 +1159,7 @@ class RenderMixin:
         if not ffmpeg_exe or not ffprobe_exe:
             raise RuntimeError("ffmpeg/ffprobe nie znalezione")
 
+        _start_mark("ffprobe_info_begin")
         info = ffprobe_stream_info(ffprobe_exe, self.video_path)
         streams = info.get("streams", [])
         fps_stream_text = (
@@ -1004,33 +1178,46 @@ class RenderMixin:
         else:
             render_w, render_h = src_w, src_h
 
+        _start_mark("ffprobe_info_end")
         from src.ffmpeg.detection import is_resolution_supported_by_encoder
+        _active_codec = str(
+            (options.get("nvidia_codec") if encoder in ("nv", "nvidia") else None)
+            or (options.get("amd_codec") if encoder in ("amd", "amd_native") else None)
+            or options.get("intel_codec")
+            or "HEVC"
+        )
         is_supported, err_msg, _ = is_resolution_supported_by_encoder(
             resolution_name=resolution,
             encoder=encoder,
             source_dimensions=(src_w, src_h),
             ffmpeg_exe=ffmpeg_exe,
+            codec=_active_codec,
+            nvidia_backend=str(options.get("nvidia_backend") or ""),
         )
         if not is_supported:
             print(f"[RenderCapabilityGate] BLOCKED: {err_msg}", flush=True)
-            self.signals.sig_error.emit(err_msg)
-            job_id = options.get("_queue_job_id")
-            queue = options.get("_export_queue")
-            if job_id and queue is not None:
-                queue.notify_render_done(job_id, success=False, error_message=err_msg)
-            return
+            from src.ffmpeg.render_errors import PreflightError
+            raise PreflightError(
+                code="UNSUPPORTED_RESOLUTION",
+                stage="preflight_resolution",
+                user_message=err_msg,
+                recommended_action="Wybierz rozdzielczość 4K (3840x2160) lub niższą w zakładce Eksport.",
+            )
 
+        _start_mark("resolution_check_end")
         import copy
         effective_layout = options.get("layout") if options.get("layout") else self.layout
         layout = dict(copy.deepcopy(effective_layout), cut_regions=list(self._cut_regions))
 
 
         # Odczytaj rotację z metadanych lub kontenera
+        _constants = self._export_project_constants(ffprobe_exe)
+        records = _constants["records"]
         if records:
-            rotation_degrees = get_rotation_from_metadata(records)
+            rotation_degrees = _constants["rotation_from_metadata"]
         else:
             rotation_degrees = getattr(self.telemetry, "rotation_degrees", 0) or 0
-        container_rotation = get_container_rotation(ffprobe_exe, self.video_path)
+        container_rotation = _constants["container_rotation"]
         if container_rotation != 0:
             effective_rotation = container_rotation
             container_rotation_arg = container_rotation
@@ -1038,6 +1225,7 @@ class RenderMixin:
             effective_rotation = rotation_degrees
             container_rotation_arg = 0
 
+        _start_mark("container_rotation_end")
         SMOOTHING_WINDOW = 5
         speed = getattr(self.telemetry, "speed_samples", None)
         if not speed and records:
@@ -1060,53 +1248,39 @@ class RenderMixin:
             {"phase": "prep", "pct": 0.0, "label": "Przygotowywanie HUD..."},
         )
 
+        _start_mark("compass_begin")
         compass_cfg = self.layout.get("indicators", {}).get("compass", {})
         compass_hybrid_samples = None
-        if hybrid_enabled(compass_cfg):
-            compass_hybrid_samples = self.telemetry.prepare_compass(compass_cfg).samples
-        field_samples = {
-            "compass_hybrid_samples": compass_hybrid_samples,
-            "speed_samples": speed,
-            "track_samples": track,
-            "alt_samples": alt,
-            "heading_samples": getattr(self.telemetry, "heading_samples", None),
-            "gpx_heading_samples": getattr(self.telemetry, "gpx_heading_samples", None),
-            "slope_samples": getattr(self.telemetry, "slope_samples", None),
-            "gpx_slope_samples": getattr(self.telemetry, "gpx_slope_samples", None),
-            "iso_samples": getattr(self.telemetry, "iso_samples", None),
-            "exposure_samples": getattr(self.telemetry, "exposure_samples", None),
-            "temperature_samples": getattr(self.telemetry, "temperature_samples", None),
-            "accel_x_samples": getattr(self.telemetry, "accel_x_samples", None),
-            "accel_y_samples": getattr(self.telemetry, "accel_y_samples", None),
-            "accel_z_samples": getattr(self.telemetry, "accel_z_samples", None),
-            "accel_magnitude_samples": getattr(self.telemetry, "accel_magnitude_samples", None),
-            "gyro_x_samples": getattr(self.telemetry, "gyro_x_samples", None),
-            "gyro_y_samples": getattr(self.telemetry, "gyro_y_samples", None),
-            "gyro_z_samples": getattr(self.telemetry, "gyro_z_samples", None),
-            "gyro_magnitude_samples": getattr(self.telemetry, "gyro_magnitude_samples", None),
-            "accelerometer_array": getattr(self.telemetry, "accelerometer_array", None),
-            "gyroscope_array": getattr(self.telemetry, "gyroscope_array", None),
-        }
-        lean_timelines = {}
-        if hasattr(self.telemetry, "_get_lean_roll_samples"):
-            for k, cfg in (layout or {}).get("indicators", {}).items():
-                if isinstance(cfg, dict) and (cfg.get("form") == "lean" or k == "lean_indicator"):
-                    axis = str(cfg.get("axis", "x")).strip().lower()
-                    if axis not in ("x", "y", "z"):
-                        axis = "x"
-                    smooth_s = float(cfg.get("lean_smoothing_s", 0.0) or 0.0)
-                    try:
-                        tl = self.telemetry._get_lean_roll_samples(axis, smooth_s)
-                        if tl:
-                            lean_timelines[f"{axis}_{smooth_s:.2f}"] = tl
-                            lean_timelines[k] = tl
-                    except Exception:
-                        pass
-        field_samples["lean_timelines"] = lean_timelines
+        # Prepare-on-load contract: the export consumes the compass and Lean
+        # axes prepared with the project; it never builds them at Start.
+        _unprepared = []
+        if (hybrid_enabled(compass_cfg) and hasattr(self.telemetry, "compass_prepared")
+                and not self.telemetry.compass_prepared(compass_cfg)):
+            _unprepared.append("kompas FIT + IMU")
+        if hasattr(self.telemetry, "lean_prepared"):
+            for _k, _cfg in (layout or {}).get("indicators", {}).items():
+                if (isinstance(_cfg, dict) and _cfg.get("enabled", True)
+                        and (_cfg.get("form") == "lean" or _k == "lean_indicator")
+                        and str(_cfg.get("source", "gyro")).strip().lower() != "grade"):
+                    _axis = str(_cfg.get("axis", "x")).strip().lower()
+                    _lean_axis = _axis if _axis in ("x", "y", "z") else "x"
+                    _lean_smooth = float(_cfg.get("lean_smoothing_s", 0.0) or 0.0)
+                    if not self.telemetry.lean_prepared(_lean_axis, _lean_smooth):
+                        if self.telemetry.lean_preparation_state(_lean_axis, _lean_smooth)["state"] == "unavailable":
+                            continue  # no usable IMU: the indicator is hidden, the export is not blocked
+                        _unprepared.append(f"Lean ({_k})")
+        if _unprepared:
+            _err = RuntimeError("Projekt nie jest gotowy do eksportu: trwa przygotowanie: "
+                                + ", ".join(_unprepared) + ". Eksport startuje dopiero na gotowych danych.")
+            _err.stage = "preflight_prepare"
+            raise _err
+        field_samples = self._export_field_samples(layout, speed, track, alt)
+        _start_mark("compass_end")
 
-        # Resolve HUD resolution scale policy (Auto -> 75% for Intel 4K, 100% for other)
-        from src.ffmpeg.streaming import resolve_hud_resolution_policy
-        hud_resolution_scale, policy_msg = resolve_hud_resolution_policy(
+        _start_mark("lean_end")
+        # Resolve HUD resolution scale policy (Auto -> 75% for Intel 4K, 50% for NVIDIA 4K, 100% for other)
+        from src.ffmpeg.streaming import resolve_effective_hud_dimensions
+        ov_w, ov_h, hud_resolution_scale, policy_msg = resolve_effective_hud_dimensions(
             encoder=encoder,
             render_w=render_w,
             render_h=render_h,
@@ -1115,38 +1289,151 @@ class RenderMixin:
         if policy_msg:
             print(policy_msg, flush=True)
 
-        # HUD is rasterized at an explicit fraction of the export canvas.
-        # Keep dimensions even because the downstream YUV/GPU filters require it.
-        if render_w == 3840 and render_h == 2160 and abs(hud_resolution_scale - 0.75) < 1e-4:
-            ov_w = 2560
-            ov_h = 1440
-        elif render_w == 3840 and render_h == 2160 and abs(hud_resolution_scale - 0.5) < 1e-4:
-            ov_w = 1920
-            ov_h = 1080
-        else:
-            ov_w = max(2, int(round(render_w * hud_resolution_scale)))
-            ov_h = max(2, int(round(render_h * hud_resolution_scale)))
-        if ov_w % 2:
-            ov_w += 1
-        if ov_h % 2:
-            ov_h += 1
+        _start_mark("map_contract_begin")
+        # ── Prepare-on-load contract: map ─────────────────────────────
+        # Network-free check that every tile this backend draws was prepared
+        # with the project; the export itself never downloads imagery.
+        from src.project_preparation import (
+            map_export_gate,
+            export_map_seed,
+            media_window,
+            ProjectMapPreparation,
+            map_signature,
+            export_consumer,
+        )
+        _map_track = self._project_map_gps_track() if hasattr(self, "_project_map_gps_track") else None
+        is_nv_native = (
+            encoder in ("nv", "nvidia")
+            and options.get("nvidia_backend") in ("native_d3d11", "NVIDIA Native D3D11")
+        )
+        _map_encoder = "nvidia_native" if is_nv_native else encoder
+        _target_hud_w = ov_w if not is_nv_native else None
+        _map_win = media_window(getattr(self, "video_timeline", None),
+                                getattr(self.telemetry, "start_dt_utc", None), self.video_duration_s)
+        _map_ok, _map_message, _map_reqs = map_export_gate(
+            layout, _map_track or [], _map_encoder, render_w,
+            _map_win,
+            hud_w=_target_hud_w)
 
-        # ── Map Render Contract (Section 8) ───────────────────────────
-        try:
-            from src.gui.map_prefetch import MapBackgroundPrefetchManager
-            _prefetch_mgr = MapBackgroundPrefetchManager.get_instance()
-            _prefetch_status = _prefetch_mgr.pause_or_cancel_for_render()
+        if not _map_ok:
+            mgr = ProjectMapPreparation.instance()
+            # If preparation is not currently running, trigger schedule for the required tiles
+            if not mgr.is_busy() and mgr.state != "preparing":
+                cons = export_consumer(_map_encoder, render_w, hud_w=_target_hud_w)
+                sig = map_signature(layout, _map_track or [], [cons] if cons else [], _map_win)
+                print(f"[PREPARE CONTRACT] scheduling missing map tiles before export: {sum(len(r.tiles) for r in _map_reqs)} tiles", flush=True)
+                mgr.schedule(sig, _map_reqs)
+
+            job_id = options.get("_queue_job_id")
+            queue = options.get("_export_queue")
+            if job_id and queue is not None:
+                queue.notify_render_waiting(job_id, "Oczekiwanie na przygotowanie mapy")
+
+            print(f"[PREPARE CONTRACT] map not ready yet ({_map_message}), waiting for completion...", flush=True)
+            while not self.render_cancel_event.is_set():
+                snap = mgr.snapshot()
+                if snap["state"] == "ready":
+                    break
+                if snap["state"] == "error":
+                    err_detail = snap.get("error") or "Błąd pobierania kafelków mapy"
+                    _err = RuntimeError(f"Projekt nie jest gotowy do eksportu: {err_detail}. Sprawdź połączenie z internetem i ponów próbę.")
+                    _err.stage = "preflight_prepare"
+                    raise _err
+
+                prep_cur = snap.get("prepared", 0)
+                prep_tot = snap.get("required", 0)
+                self.signals.sig_render_progress.emit(
+                    0, 0, 0.0, 0.0,
+                    {
+                        "phase": "prep",
+                        "pct": (prep_cur / prep_tot) if prep_tot > 0 else 0.0,
+                        "label": f"Pobieranie kafelków mapy ({prep_cur}/{prep_tot})...",
+                        "work_done": prep_cur,
+                        "work_total": prep_tot,
+                    }
+                )
+                if mgr.wait(timeout=0.25):
+                    break
+
+            if self.render_cancel_event.is_set():
+                print("[PREPARE CONTRACT] cancelled during map preparation wait", flush=True)
+                return {}
+
+            _map_ok, _map_message, _map_reqs = map_export_gate(
+                layout, _map_track or [], _map_encoder, render_w,
+                _map_win,
+                hud_w=_target_hud_w)
+            if not _map_ok:
+                _err = RuntimeError(_map_message)
+                _err.stage = "preflight_prepare"
+                raise _err
+
+            if job_id and queue is not None:
+                queue.notify_render_resumed(job_id)
+
+        print(f"[PREPARE CONTRACT] export consumes prepared map tiles={sum(len(r.tiles) for r in _map_reqs)}", flush=True)
+
+        _start_mark("map_contract_end")
+        # ── Prepare-on-load contract: HUD frame model & native_states.bin ──
+        if hasattr(self, "_hud_data_backend_needs_preparation") and self._hud_data_backend_needs_preparation():
+            hud_state, hud_reason = self._hud_data_readiness()
+            if hud_state == "preparing":
+                job_id = options.get("_queue_job_id")
+                queue = options.get("_export_queue")
+                if job_id and queue is not None:
+                    queue.notify_render_waiting(job_id, f"Oczekiwanie na dane HUD: {hud_reason}")
+                print(f"[PREPARE CONTRACT] HUD model not ready yet ({hud_reason}), waiting asynchronously...", flush=True)
+                _wait_t0 = time.perf_counter()
+                while not self.render_cancel_event.is_set():
+                    hud_state, hud_reason = self._hud_data_readiness()
+                    if hud_state in ("ready", "failed"):
+                        break
+                    _elapsed_w = time.perf_counter() - _wait_t0
+                    self.signals.sig_render_progress.emit(
+                        0, 0, 0.0, 0.0,
+                        {
+                            "phase": "prep",
+                            "pct": 0.0,
+                            "label": f"Przygotowywanie danych HUD ({hud_reason}, {_elapsed_w:.1f}s)...",
+                        },
+                    )
+                    time.sleep(0.15)
+                if self.render_cancel_event.is_set():
+                    print("[PREPARE CONTRACT] cancelled during HUD data preparation wait", flush=True)
+                    return {}
+                if job_id and queue is not None:
+                    queue.notify_render_resumed(job_id)
+            if hud_state == "failed":
+                from src.ffmpeg.render_errors import PreflightError
+                raise PreflightError(
+                    code="HUD_NOT_READY",
+                    stage="preflight_hud_data",
+                    user_message=f"Nie udało się przygotować danych HUD do eksportu: {hud_reason}",
+                    recommended_action="Sprawdź poprawność plików telemetrii (FIT/GPX) lub wczytaj projekt ponownie.",
+                )
+            # Ensure export_provider matches current cut_regions and has valid native_states.bin
+            _base_prov = getattr(self, "_prepared_hud_provider", None)
+            _exp_prov = getattr(self, "_prepared_hud_export_provider", None) or _base_prov
+            _cur_cuts = list(getattr(self, "_cut_regions", ()) or ())
+            if _base_prov is not None:
+                from src.prepared_hud_frames import prepare_export_view
+                from src.prepared_native_hud import native_states_ready, prepare_native_states
+                if _cur_cuts and (_exp_prov is _base_prov or getattr(_exp_prov, "frame_index_map", None) is None):
+                    _exp_prov = prepare_export_view(_base_prov, _cur_cuts)
+                    self._prepared_hud_export_provider = _exp_prov
+                elif not _cur_cuts and _exp_prov is not _base_prov:
+                    _exp_prov = _base_prov
+                    self._prepared_hud_export_provider = _base_prov
+                _ns_ok, _ns_reason = native_states_ready(_exp_prov)
+                if not _ns_ok:
+                    print(f"[PREPARE CONTRACT] Building native_states.bin before export ({_ns_reason})...", flush=True)
+                    prepare_native_states(_exp_prov)
             print(
-                f"[AMD RENDER MAP CONTRACT]\n"
-                f"REQUIRED_TILES={_prefetch_status.get('required')}\n"
-                f"CACHED_TILES={_prefetch_status.get('cached')}\n"
-                f"MISSING_TILES={_prefetch_status.get('missing')}\n"
-                f"BACKGROUND_PREFETCH_ACTIVE={_prefetch_status.get('active_before')}",
+                f"[PREPARE CONTRACT] HUD model READY: provider_frames={getattr(_base_prov, 'frames', 0)} "
+                f"export_frames={getattr(_exp_prov, 'frames', 0)} "
+                f"native_states_path={getattr(_exp_prov, 'native_states_path', None)}",
                 flush=True,
             )
-        except Exception as _e:
-            print(f"[RenderMixin] Map contract check warning: {_e}", flush=True)
-
         inline_gpmf_plan = None
         if options.get("preserve_original_gpmf"):
             from src.ffmpeg.gpmf_export import prepare_inline_gpmf
@@ -1164,43 +1451,15 @@ class RenderMixin:
                 cut_regions=list(self._cut_regions) if gpmf_timeline is None else None,
                 max_frames=options.get("max_frames"),
                 target_fps=fps_stream,
-                start_frame=(int(options.get("start_frame", 0) or 0) if encoder in ("nv", "nvidia") else 0),
+                start_frame=(int(options.get("start_frame", 0) or 0) if encoder in ("cpu", "nv", "nvidia") else 0),
                 cancel_event=self.render_cancel_event,
             )
             options["_inline_gpmf_plan"] = inline_gpmf_plan
 
+        _start_mark("gpmf_end")
         _cache_key = None
-        if encoder in ("amd", "amd_native"):
-            try:
-                from src.render_preparation import RenderPreparationService
-                from src.ffmpeg.streaming import resolve_amd_gui_range_plan
-                
-                cut_regions = list(getattr(self, "_cut_regions", []))
-                resolved_timeline, resolved_frames, _ = resolve_amd_gui_range_plan(
-                    video_timeline=getattr(self, "video_timeline", None),
-                    cut_regions=cut_regions,
-                    target_fps=fps_stream,
-                    fallback_duration_s=self.video_duration_s,
-                )
-                
-                _prep_cache = RenderPreparationService.prepare(
-                    options=options,
-                    telemetry=self.telemetry,
-                    layout=layout,
-                    video_timeline=resolved_timeline,
-                    video_paths=list(options.get("video_paths") or self.video_paths),
-                    target_fps=fps_stream,
-                    total_frames=resolved_frames,
-                    fit_path=getattr(self, "fit_path", None),
-                    gpx_path=getattr(self, "gpx_path", None),
-                )
-                _cache_key = _prep_cache.cache_key if _prep_cache else None
-            except Exception as e:
-                print(f"[Render Mixin] prepare error: {e}")
-                _cache_key = None
-            print(f"PARENT_CACHE_KEY={_cache_key}", flush=True)
-
         stream_kwargs = dict(
+            prepared_hud_provider=(getattr(self, "_prepared_hud_export_provider", None) or getattr(self, "_prepared_hud_provider", None)),
             cache_key=_cache_key,
             fit_path=getattr(self, "fit_path", None),
             gpx_path=getattr(self, "gpx_path", None),
@@ -1282,13 +1541,18 @@ active_process_holder=getattr(self, "render_process_holder", {}),
             nvidia_backend=options.get("nvidia_backend", "legacy_cuda"),
             nvidia_codec=options.get("nvidia_codec", "HEVC"),
             nvidia_quality=options.get("nvidia_quality", "Fast"),
-            enable_compression_analysis=False,
+            enable_compression_analysis=options.get("enable_compression_analysis", True),
             codec=options.get("intel_codec") or "hevc",
-            encoder_profile=options.get("encoder_profile", "balanced"),
+            encoder_profile=(options.get("cpu_profile", "quality") if encoder == "cpu"
+                             else options.get("encoder_profile", "balanced")),
+            cpu_rate_mode=options.get("cpu_rate_mode", "crf"),
             max_frames=options.get("max_frames"),
+            start_frame=int(options.get("start_frame", 0) or 0) if encoder == "cpu" else 0,
             export_log_path=options.get("_export_log_path") or options.get("_amd_export_log_path"),
             _intel_preview_tap=options.get("_intel_preview_tap"),
+            _nvidia_cuda_preview_session=options.get("_nvidia_cuda_preview_session"),
         )
+        _start_mark("gps_track_kwargs_end")
         _sig = inspect.signature(stream_overlay_to_ffmpeg)
         if not any(p.kind == inspect.Parameter.VAR_KEYWORD for p in _sig.parameters.values()):
             _accepted_stream_params = set(_sig.parameters.keys())
@@ -1320,7 +1584,7 @@ active_process_holder=getattr(self, "render_process_holder", {}),
                 or getattr(self.telemetry, "fit_path", None)
             )
             preview_enabled = bool(
-                options.get("hud_preview", False)
+                (options.get("hud_preview", False) or options.get("_gui_hud_preview_checkbox", False))
                 and options.get("_nvidia_preview_tap")
             )
             gui_snapshot = {
@@ -1340,7 +1604,7 @@ active_process_holder=getattr(self, "render_process_holder", {}),
                     "output": str(output),
                     "hud_preview_checkbox": bool(options.get("_gui_hud_preview_checkbox", False)),
                     "native_preview_tap_enabled": preview_enabled,
-                    "compression_analysis": False,
+                    "compression_analysis": bool(options.get("enable_compression_analysis", True)),
                     "start_frame": int(options.get("start_frame", 0) or 0),
                     "max_frames": options.get("max_frames"),
                 },
@@ -1521,6 +1785,11 @@ active_process_holder=getattr(self, "render_process_holder", {}),
                 os.environ.get("NVIDIA_RENDER_CHILD_PROCESS") == "1"
                 or bisect_mode == "clean_child_exact_good330"
             )
+            prepared_export = stream_kwargs["prepared_hud_provider"]
+            if getattr(prepared_export, "frame_index_map", None):
+                effective_timeline = prepared_export.timeline
+                effective_layout = dict(effective_layout, cut_regions=[])
+            _nvidia_in_process = export_nvidia_native_d3d11
             if use_nvidia_child:
                 from src.ffmpeg.nvidia_child_process import run_nvidia_render_child
                 success = run_nvidia_render_child(
@@ -1528,13 +1797,15 @@ active_process_holder=getattr(self, "render_process_holder", {}),
                     output_file=output,
                     layout=effective_layout,
                     telemetry=effective_telemetry,
+                    prepared_hud_provider=(getattr(self, "_prepared_hud_export_provider", None) or getattr(self, "_prepared_hud_provider", None)),
                     video_timeline=effective_timeline,
                     inline_gpmf_plan=inline_gpmf_plan,
                     codec=options.get("nvidia_codec", "HEVC"),
                     quality_profile=options.get("nvidia_quality", "Quality"),
                     video_bitrate=video_bitrate,
                     target_fps=target_fps,
-                    enable_compression_analysis=False,
+                    enable_compression_analysis=options.get("enable_compression_analysis", True),
+                    compression_csv_path=options.get("compression_csv_path"),
                     on_render_progress=getattr(self, "_emit_render_progress_callback", None),
                     progress_cb=lambda val, txt: self.signals.sig_progress.emit(val, txt),
                     cancel_event=self.render_cancel_event,
@@ -1548,18 +1819,22 @@ active_process_holder=getattr(self, "render_process_holder", {}),
             _intel_preview_tap=options.get("_intel_preview_tap"),
                 )
             else:
-                success = export_nvidia_native_d3d11(
+                from src.project_preparation import export_phase as _export_phase
+                with _export_phase("nvidia"):
+                    success = _nvidia_in_process(
                     input_files=paths,
                     output_file=output,
                     layout=effective_layout,
                     telemetry=effective_telemetry,
+                    prepared_hud_provider=(getattr(self, "_prepared_hud_export_provider", None) or getattr(self, "_prepared_hud_provider", None)),
                     video_timeline=effective_timeline,
                     inline_gpmf_plan=inline_gpmf_plan,
                     codec=options.get("nvidia_codec", "HEVC"),
                     quality_profile=options.get("nvidia_quality", "Quality"),
                     video_bitrate=video_bitrate,
                     target_fps=target_fps,
-                    enable_compression_analysis=False,
+                    enable_compression_analysis=options.get("enable_compression_analysis", True),
+                    compression_csv_path=options.get("compression_csv_path"),
                     on_render_progress=getattr(self, "_emit_render_progress_callback", None),
                     progress_cb=lambda val, txt: self.signals.sig_progress.emit(val, txt),
                     cancel_event=self.render_cancel_event,
@@ -1570,11 +1845,19 @@ active_process_holder=getattr(self, "render_process_holder", {}),
                     on_preview_frame=options.get("_nvidia_preview_tap"),
                     gui_runtime_snapshot=gui_snapshot,
                     export_log_path=options.get("_export_log_path") or options.get("_amd_export_log_path"),
-            _intel_preview_tap=options.get("_intel_preview_tap"),
-                )
+                    _intel_preview_tap=options.get("_intel_preview_tap"),
+                    preview_counters=options.get("_nvidia_preview_counters"),
+                    )
             if not success and not self.render_cancel_event.is_set():
                 raise RuntimeError("NVIDIA Native D3D11 export nie powiódł się.")
-            return {"total_overlay_frames": 0, "png_duration": 0}
+            _comp = (self.render_process_holder or {}).get("compression_stats")
+            _avg_qp = float(getattr(_comp, "avg_qp", getattr(_comp, "mean_qp", 0.0)) or 0.0) if (_comp is not None and getattr(_comp, "frames_analyzed", 0) > 0) else 0.0
+            return {
+                "total_overlay_frames": int(getattr(prepared_export, "frames", 0) or 0),
+                "png_duration": 0,
+                "avg_qp": _avg_qp,
+                "preview_stats": dict(options.get("_nvidia_preview_counters") or {}),
+            }
 
         # AMD's native D3D11/MF/AMF stack must not remain loaded in the long-
         # lived Qt process.  A real input file uses a Windows ``spawn`` child;
@@ -1607,6 +1890,9 @@ active_process_holder=getattr(self, "render_process_holder", {}),
             from src.ffmpeg.amd_child_process import run_amd_render_child
 
             child_kwargs = dict(stream_kwargs)
+            # Prepared Esri imagery (memory only) for the spawned AMD process.
+            from src.project_preparation import export_map_seed
+            child_kwargs["_prepared_map_seed"] = export_map_seed(_map_reqs)
             for key in (
                 "progress_cb",
                 "on_render_progress",
@@ -1624,9 +1910,7 @@ active_process_holder=getattr(self, "render_process_holder", {}),
             except Exception:
                 pass
 
-            import hashlib
-            import json
-
+            # Inner imports removed to avoid UnboundLocalError
             is_queue = bool(options.get("_queue_job_id"))
             mode_str = "QUEUE" if is_queue else "DIRECT"
 
@@ -1750,7 +2034,6 @@ active_process_holder=getattr(self, "render_process_holder", {}),
                 try:
                     prof_path = Path(str(out_file) + ".amd_profile.json")
                     if prof_path.exists():
-                        import json
                         with open(prof_path, "r", encoding="utf-8") as f_prof:
                             prof_data = json.load(f_prof)
                 except Exception:

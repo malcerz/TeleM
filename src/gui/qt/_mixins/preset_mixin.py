@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from src.config_paths import default_layout_path
+
 import json
 import os
 from pathlib import Path
@@ -193,7 +195,8 @@ class PresetMixin:
         """Zwraca ścieżkę do roboczego layoutu sesji w AppData."""
         import os
         base = Path(os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA") or (Path.home() / ".bikeridehud"))
-        d = base / "SportCamHUD" / "session"
+        config = os.environ.get("TELEM_CONFIG_DIR")
+        d = Path(config) / "session" if config else base / "SportCamHUD" / "session"
         d.mkdir(parents=True, exist_ok=True)
         return d / "active_layout.json"
 
@@ -230,6 +233,10 @@ class PresetMixin:
                     exp["quality_profile"] = render_tab.cmb_nvidia_quality.currentData() or render_tab.cmb_nvidia_quality.currentText()
                 if hasattr(render_tab, "edit_bitrate"):
                     exp["bitrate"] = render_tab.edit_bitrate.text().strip()
+                if hasattr(render_tab, "cmb_cpu_profile"):
+                    exp["cpu_profile"] = render_tab.cmb_cpu_profile.currentData()
+                if hasattr(render_tab, "cmb_cpu_rate_mode"):
+                    exp["cpu_rate_mode"] = render_tab.cmb_cpu_rate_mode.currentData()
                 if hasattr(render_tab, "chk_compression_analysis"):
                     exp["compression_analysis"] = render_tab.chk_compression_analysis.isChecked()
                 if hasattr(render_tab, "chk_original_gpmf"):
@@ -256,7 +263,7 @@ class PresetMixin:
             if not base:
                 return
             from src.indicators.compositor import normalize_layout_for_save, sanitize_layout_for_json
-            def_layout = Path(base) / "def_layout.json"
+            def_layout = default_layout_path(base)
             self._startup_preset_path = ""
             self.layout["_startup_preset"] = ""
             saved = normalize_layout_for_save(self.layout)
@@ -360,7 +367,7 @@ class PresetMixin:
             self.layout.setdefault("integrations", {})[name] = str(value)
             self._layout_dirty = True
             try:
-                def_layout = self.base_dir / "def_layout.json"
+                def_layout = default_layout_path(self.base_dir)
                 if def_layout.exists():
                     data = json.loads(def_layout.read_text(encoding="utf-8"))
                 else:

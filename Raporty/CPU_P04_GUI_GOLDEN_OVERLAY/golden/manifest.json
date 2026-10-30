@@ -1,0 +1,33 @@
+{
+ "purpose": "CPU P0.4 Golden HUD (editor CPU HUD == export pre-compression HUD at this frame)",
+ "video": {
+  "path": "D:\\GoPro\\GX010370.MP4",
+  "bytes": 1198487674,
+  "sha256": "0eaa599ac96294d7625650a5a0d809c1642b267d73681d6b7510bc1f5029b90c"
+ },
+ "fit": {
+  "path": "D:\\GoPro\\2026-10-13_15-02-49.fit",
+  "sha256": "77ccc078539e6c4c3b9d2bb534c76d9b6c345ba6dbcb5e464155c0665e598efa"
+ },
+ "layout": {
+  "path": "C:\\_DEV\\SportCamHUD\\def_layout.json",
+  "sha256": "0cd2a07e49f6a2ff32a24736112bc495b408a78e3cc72c9cc39b8f52f2ebfc8f"
+ },
+ "frame": {
+  "export_index": 150,
+  "start_frame": 900,
+  "absolute_frame": 1050,
+  "fps": "30000/1001",
+  "canvas": [
+   3840,
+   2160
+  ],
+  "source_rotation": 180
+ },
+ "git_head_at_capture": "1601497",
+ "git_note": "working tree had uncommitted changes at capture",
+ "hud_rgba_sha256_stored": "b7387c77066fce4703f442e6956e7c159fb3496a03cd2badbc17561b40ee9614",
+ "hud_rgba_sha256_upright": "4dbb5e8395b2c873ed65361eb61365e7a5d978f3adcb5e3cf843f923dc2a70cb",
+ "pixel_format": "RGBA8, straight alpha with RGB zeroed where alpha==0",
+ "capture_command": "python SportCamHUD.py --test-cpu-export --mode direct --video D:\\GoPro\\GX010370.MP4 --fit D:\\GoPro\\2026-10-13_15-02-49.fit --layout def_layout.json --start-frame 900 --frames 160 --profile fast --cpu-rate-mode crf --golden-dir <dir> --golden-frame 150 with TELEM_CPU_DIAG_DUMP_FRAMES=150 TELEM_CPU_DIAG_DUMP_DIR=<dir>"
+}

@@ -38,6 +38,7 @@ from PIL import Image
 
 from src.gui.qt.signals import get_signals
 from src.gui.qt.widgets.video_preview import VideoPreview, preview_aspect_size
+from src.gui.qt.widgets.export_frame_preview import ExportFramePreview
 from src.gui.qt.widgets.discrete_slider import DiscreteSlider, BitrateControl
 from src.gui.export_preview import compose_export_preview
 from src.ffmpeg.encoder_profile import EncoderProfile, DEFAULT_ENCODER_PROFILE, LEGACY_DEFAULT_ENCODER_PROFILE
@@ -120,6 +121,7 @@ class RenderTab(QWidget):
         self._hud_ts: float | None = None
         self._hud_chart_data = None
         self._hud_prepare_cache: dict | None = None
+        self._queue_wait: dict | None = None  # queue job waiting for READY data
         self._last_preview_time = 0.0
         self._preview_busy = False
         self._preview_lock = threading.Lock()
@@ -154,6 +156,7 @@ class RenderTab(QWidget):
         self._export_preview_hevc = False
         self._amd_export_preview_session: AMDContinuousHEVCPreview | AMDGPUNativeFrameTapPreview | None = None
         self._export_preview_gpu_tap = False
+        self._intel_preview_channel = None
         self._last_continuous_hevc_stats: dict[str, object] = {}
         self._gpu_tap_pending_payload: tuple | None = None
         self._gpu_tap_signal_pending = False
@@ -210,7 +213,7 @@ class RenderTab(QWidget):
         left_layout.setSpacing(4)
 
         # HUD Preview widget (czarne tło, bez filmu) — domyślnie ukryty
-        self.hud_preview_label = QLabel("Renderowanie...")
+        self.hud_preview_label = ExportFramePreview("Renderowanie...")
         self.hud_preview_label.setAlignment(Qt.AlignCenter)
         self.hud_preview_label.setStyleSheet(
             "QLabel { background-color: #000000; color: #888; "
@@ -411,10 +414,10 @@ class RenderTab(QWidget):
         self._populate_nvidia_backends()
         layout_nvidia.addRow("Backend NVIDIA:", self.cmb_nvidia_backend)
 
-        self.cmb_nvidia_codec = DiscreteSlider()
+        self.cmb_nvidia_codec = QComboBox()
         self.cmb_nvidia_codec.setToolTip("Wybór sprzętowego kodeka wideo NVIDIA NVENC.")
         self._populate_nvidia_codecs(preserve_selection=False)
-        layout_nvidia.addRow("Kodek NVIDIA:", self.cmb_nvidia_codec)
+        layout_nvidia.addRow("Koder wideo:", self.cmb_nvidia_codec)
 
         self.cmb_nvidia_quality = DiscreteSlider([
             ("Szybki", "P1"),
@@ -437,14 +440,31 @@ class RenderTab(QWidget):
         layout_cpu.setContentsMargins(0, 0, 0, 0)
         layout_cpu.setSpacing(4)
 
-        self.cmb_x265_preset = DiscreteSlider([
-            "ultrafast", "superfast", "veryfast", "faster", "fast", "medium"
+        self.cmb_cpu_profile = DiscreteSlider([
+            ("Szybki", "fast"),
+            ("Zbalansowany", "balanced"),
+            ("Jakość", "quality"),
         ])
-        self.cmb_x265_preset.setCurrentText("fast")
-        self.cmb_x265_preset.setToolTip(
-            "Preset kodowania CPU libx265 (10-bit). 'fast' to rekomendowany domyślny preset dla 4K i 8K."
+        self.cmb_cpu_profile.setCurrentIndex(self.cmb_cpu_profile.findData("balanced"))
+        self.cmb_cpu_profile.setToolTip(
+            "Profil kodowania CPU libx265 (Main10):\n"
+            "Szybki: preset ultrafast (najszybszy, najniższa efektywność kompresji).\n"
+            "Zbalansowany: preset faster.\n"
+            "Jakość: preset medium (najwolniejszy)."
         )
-        layout_cpu.addRow("Preset x265:", self.cmb_x265_preset)
+        self.cmb_x265_preset = self.cmb_cpu_profile  # legacy alias
+        layout_cpu.addRow("Profil enkodera:", self.cmb_cpu_profile)
+
+        self.cmb_cpu_rate_mode = QComboBox()
+        self.cmb_cpu_rate_mode.addItem("Bitrate (średni, ABR)", "abr")
+        self.cmb_cpu_rate_mode.addItem("Stała jakość (CRF 24)", "crf")
+        self.cmb_cpu_rate_mode.setToolTip(
+            "Bitrate (ABR): enkoder dąży do średniego bitrate z suwaka; to nie jest CBR\n"
+            "i nie ma twardego limitu, krótkie filmy mogą odbiegać od wartości.\n"
+            "Stała jakość (CRF 24): rozmiar zależy od treści, suwak bitrate jest ignorowany.\n"
+            "Projekty zapisane przed P0.3 zachowują dotychczasowe kodowanie: Jakość (medium) + CRF 24."
+        )
+        layout_cpu.addRow("Kontrola bitrate:", self.cmb_cpu_rate_mode)
 
 # ── Intel Options (Etap 8B) ──────────────────────────────────
         self.widget_intel_options = QWidget()
@@ -514,8 +534,11 @@ class RenderTab(QWidget):
                 self.cmb_nvidia_quality.setEnabled(True)
             if hasattr(self, "widget_cpu_options"):
                 self.widget_cpu_options.setVisible(is_cpu)
+            if hasattr(self, "cmb_cpu_rate_mode") and hasattr(self, "edit_bitrate"):
+                self.edit_bitrate.setEnabled(
+                    not (is_cpu and self.cmb_cpu_rate_mode.currentData() == "crf"))
 
-            # Dynamic AMF Hardware Capability Detection (no blanket vendor disable)
+            # Dynamic Hardware Capability Detection (AMD AMF & NVIDIA NVENC)
             if hasattr(self, "cmb_resolution"):
                 try:
                     from src.ffmpeg.amd_capabilities import get_gpu_capabilities
@@ -525,6 +548,15 @@ class RenderTab(QWidget):
                 except Exception:
                     caps = None
                     max_w, max_h = None, None
+
+                nv_codec_sel = (
+                    (self.cmb_nvidia_codec.currentData() or self.cmb_nvidia_codec.currentText())
+                    if hasattr(self, "cmb_nvidia_codec") else "hevc"
+                )
+                nv_backend_sel = (
+                    (self.cmb_nvidia_backend.currentData() or "native_d3d11")
+                    if hasattr(self, "cmb_nvidia_backend") else "native_d3d11"
+                )
 
                 from src.ffmpeg.command_builder import RESOLUTION_MAP
                 for i in range(self.cmb_resolution.count()):
@@ -550,11 +582,24 @@ class RenderTab(QWidget):
                             )
                         else:
                             self.cmb_resolution.setItemEnabled(i, True)
+                    elif target_res is not None and is_nv:
+                        w, h = target_res
+                        try:
+                            from src.ffmpeg.backend_capabilities import check_nvidia_encode_resolution
+                            nv_ok, nv_reason, _ = check_nvidia_encode_resolution(
+                                w, h, codec=str(nv_codec_sel), nvidia_backend=str(nv_backend_sel)
+                            )
+                        except Exception:
+                            nv_ok, nv_reason = True, ""
+                        if not nv_ok:
+                            self.cmb_resolution.setItemEnabled(i, False, nv_reason)
+                        else:
+                            self.cmb_resolution.setItemEnabled(i, True)
                     else:
-                        # CPU x265, NVIDIA, Intel have no AMF limit
+                        # CPU x265, Intel have no resolution limit here
                         self.cmb_resolution.setItemEnabled(i, True)
 
-                if is_amd:
+                if is_amd or is_nv:
                     curr_idx = self.cmb_resolution.currentIndex()
                     if not self.cmb_resolution.isItemEnabled(curr_idx):
                         old_resolution = self.cmb_resolution.currentText()
@@ -563,7 +608,7 @@ class RenderTab(QWidget):
                             source_w, source_h = self._source_dimensions
                             requested = (
                                 f"{source_w}x{source_h}"
-                                if source_w and source_h
+                                if (old_resolution.strip().lower() == "source" and source_w and source_h)
                                 else old_resolution
                             )
                             print(
@@ -575,7 +620,12 @@ class RenderTab(QWidget):
 
         self._update_backend_visibility = _update_backend_visibility
         self.cmb_encoder.currentIndexChanged.connect(lambda _: self._update_backend_visibility())
+        # Prepare-on-load: the export backend/resolution decides the map tiles
+        # to prepare; a change re-prepares only what is missing.
+        self.cmb_encoder.currentIndexChanged.connect(lambda _: self._on_export_target_changed())
         self.cmb_nvidia_backend.currentIndexChanged.connect(lambda _: _update_backend_visibility())
+        self.cmb_nvidia_backend.currentIndexChanged.connect(lambda _: self._on_export_target_changed())
+        self.cmb_nvidia_codec.currentIndexChanged.connect(lambda _: _update_backend_visibility())
 
         form.addRow(self.widget_nvidia_options)
         form.addRow(self.widget_cpu_options)
@@ -585,6 +635,7 @@ class RenderTab(QWidget):
         ])
         self.cmb_resolution.setCurrentText("source")
         form.addRow("Rozdzielczość:", self.cmb_resolution)
+        self.cmb_resolution.currentIndexChanged.connect(lambda _: self._on_export_target_changed())
         _update_backend_visibility()
 
         self.cmb_rotation = QComboBox()
@@ -603,9 +654,11 @@ class RenderTab(QWidget):
             "dla pozostałych 100%."
         )
         form.addRow("Rozdzielczość HUD:", self.cmb_hud_resolution)
+        self.cmb_hud_resolution.currentIndexChanged.connect(lambda _: self._on_export_target_changed())
 
         self.edit_bitrate = BitrateControl(min_mbps=5, max_mbps=120, default_mbps=40)
         form.addRow("Bitrate:", self.edit_bitrate)
+        self.cmb_cpu_rate_mode.currentIndexChanged.connect(lambda _: self._update_backend_visibility())
 
         row_out = QHBoxLayout()
         self.edit_output = QLineEdit("output_h265.mp4")
@@ -869,6 +922,7 @@ class RenderTab(QWidget):
             # Podłącz sygnały Qt (queued connection — thread-safe GUI update & dispatch)
             self.signals.sig_queue_job_updated.connect(self._on_queue_job_updated)
             self.signals.sig_queue_dispatch_render.connect(self._dispatch_queue_job_render)
+            self.signals.sig_export_readiness_changed.connect(self._on_export_readiness_changed)
             self.signals.sig_queue_started.connect(
                 lambda: self._set_queue_btn_state(running=True)
             )
@@ -964,7 +1018,30 @@ class RenderTab(QWidget):
                     )
                 return
 
-        # Canonical entrypoint
+        # Prepare-on-load contract: the encoder starts only on READY data.
+        # A job that is still being prepared waits (no encoder, no failure);
+        # it resumes on the readiness event, not on a timer.
+        ctrl = self._controller
+        state, reason = (ctrl.export_readiness_state() if ctrl is not None and hasattr(ctrl, "export_readiness_state")
+                         else ("ready", ""))
+        if state == "failed":
+            log_queue_trace("QUEUE READY FAILED", job_id=job.job_id, output_path=job.output_path,
+                            input_videos=job.video_paths, extra=reason)
+            if self._export_queue:
+                self._export_queue.notify_render_done(job.job_id, success=False, error_message=reason)
+            return
+        if state == "preparing":
+            self._queue_wait = {"job": job, "options": options}
+            log_queue_trace("QUEUE WAIT READY", job_id=job.job_id, output_path=job.output_path,
+                            input_videos=job.video_paths, extra=reason)
+            if self._export_queue:
+                self._export_queue.notify_render_waiting(job.job_id, reason)
+            print(f"[QUEUE PREPARING] job={job.job_id} {reason}", flush=True)
+            return
+        self._launch_queue_job(job, options)
+
+    def _launch_queue_job(self, job: ExportJob, options: dict) -> None:
+        """Start the render of a queue job whose data is READY (single entrypoint)."""
         success = self._start_render(options, job=job)
         if not success:
             rejection = getattr(self, "_render_start_rejection", "") or "Render start rejected (busy)"
@@ -979,6 +1056,33 @@ class RenderTab(QWidget):
                 self._export_queue.notify_render_done(
                     job.job_id, success=False, error_message=rejection
                 )
+
+    def _on_export_readiness_changed(self) -> None:
+        """A preparation finished: start the waiting queue job, once, if it is READY."""
+        from src.gui.export_queue import log_queue_trace
+        wait = getattr(self, "_queue_wait", None)
+        if not wait or self._export_queue is None:
+            return
+        job, options = wait["job"], wait["options"]
+        if self._export_queue.job_render_status(job.job_id) != "waiting_ready":
+            # Cancelled or finished while waiting: the stale waiter is dropped.
+            self._queue_wait = None
+            return
+        ctrl = self._controller
+        state, reason = ctrl.export_readiness_state() if ctrl is not None else ("failed", "brak kontrolera")
+        print(f"[QUEUE READY CHECK] job={job.job_id} state={state} reason={reason}", flush=True)
+        if state == "preparing":
+            return
+        self._queue_wait = None
+        if state == "failed":
+            log_queue_trace("QUEUE READY FAILED", job_id=job.job_id, output_path=job.output_path,
+                            input_videos=job.video_paths, extra=reason)
+            self._export_queue.notify_render_done(job.job_id, success=False, error_message=reason)
+            return
+        self._export_queue.notify_render_resumed(job.job_id)
+        log_queue_trace("QUEUE READY START", job_id=job.job_id, output_path=job.output_path,
+                        input_videos=job.video_paths, extra="data READY")
+        self._launch_queue_job(job, options)
 
     def _restore_controller_global_preferences(self) -> None:
         """Po zadaniu z kolejki: layout kontrolera jest kopią snapshotu zadania —
@@ -1005,9 +1109,13 @@ class RenderTab(QWidget):
         ctrl = self._controller
         if ctrl is None:
             return
-        curr_paths = [str(p) for p in getattr(ctrl, "video_paths", [])]
-        job_paths = [str(p) for p in job.video_paths]
-        paths_changed = (curr_paths != job_paths or getattr(ctrl, "video_path", None) is None)
+        # Identity of the sources (path, size, mtime) decides what is reloaded.
+        # The same material keeps its telemetry and prepared data (idempotent restore).
+        from src.project_preparation import source_key, restore_reload_plan
+        job_key = source_key(job.video_paths, job.fit_path, job.gpx_path)
+        loaded_key = getattr(ctrl, "_loaded_source_key", None)
+        plan = restore_reload_plan(loaded_key, job_key, getattr(ctrl, "video_path", None))
+        paths_changed, fit_changed, gpx_changed = plan["paths_changed"], plan["fit_changed"], plan["gpx_changed"]
         if paths_changed:
             ctrl.video_paths = [Path(p) for p in job.video_paths]
             ctrl.video_path = ctrl.video_paths[0] if ctrl.video_paths else None
@@ -1081,9 +1189,8 @@ class RenderTab(QWidget):
                     print(f"[RenderTab] Failed to rebuild timeline: {e}", flush=True)
         if job.fit_path and hasattr(ctrl, "telemetry") and ctrl.telemetry is not None:
             try:
-                curr_fit = getattr(ctrl.telemetry, "fit_path", None)
                 has_fit_track = bool(getattr(ctrl.telemetry, "fit_gps_track", None))
-                if str(curr_fit) != str(job.fit_path) or not has_fit_track:
+                if fit_changed or paths_changed or not has_fit_track:
                     ctrl.telemetry.load_fit(
                         ctrl.video_path, getattr(ctrl.telemetry, "start_dt_utc", None),
                         manual_path=Path(job.fit_path),
@@ -1108,7 +1215,7 @@ class RenderTab(QWidget):
                 pass
         print(f"[QUEUE PREFETCH DIAG] QUEUE_MAP_PREFETCH_STARTED={prefetch_started}", flush=True)
 
-        if job.gpx_path and hasattr(ctrl, "telemetry") and ctrl.telemetry is not None:
+        if job.gpx_path and gpx_changed and hasattr(ctrl, "telemetry") and ctrl.telemetry is not None:
             try:
                 ctrl.telemetry.load_gpx(
                     ctrl.video_path, getattr(ctrl.telemetry, "start_dt_utc", None),
@@ -1117,11 +1224,15 @@ class RenderTab(QWidget):
             except Exception as exc:
                 print(f"[RenderTab] GPX load for job failed: {exc}", flush=True)
         # The job snapshot carries the telemetry sync chosen when it was queued.
+        # Idempotent: an identical sync changes no value and invalidates nothing.
         if hasattr(ctrl, "apply_layout_telemetry_sync"):
             try:
                 ctrl.apply_layout_telemetry_sync(ctrl.layout)
             except Exception as exc:
                 print(f"[RenderTab] Telemetry sync for job failed: {exc}", flush=True)
+        ctrl._loaded_source_key = job_key
+        print(f"[QUEUE RESTORE] sources_reloaded={paths_changed or fit_changed or gpx_changed} "
+              f"job={job.job_id}", flush=True)
 
     def _start_render(self, options: dict, job: ExportJob | None = None) -> bool:
         """CANONICAL RENDER ENTRYPOINT — wspólna ścieżka uruchamiania dla kolejki i EKSPORTUJ."""
@@ -1202,22 +1313,29 @@ class RenderTab(QWidget):
 
         hud_on = bool(options.get("_gui_hud_preview_checkbox", self.chk_hud_preview.isChecked()))
         selected_encoder = str(options.get("encoder", "")).strip().lower()
-        resolved_amd = selected_encoder == "amd"
+        resolved_encoder = selected_encoder
         if selected_encoder == "auto":
             try:
-                from src.ffmpeg import detect_best_encoder
-                resolved_amd = detect_best_encoder() == "amd"
+                from src.ffmpeg.backend_capabilities import resolve_auto_backend
+                resolved_encoder = resolve_auto_backend().lower()
             except Exception:
-                resolved_amd = False
-        is_nv_selected = selected_encoder in ("nv", "nvidia")
+                try:
+                    from src.ffmpeg import detect_best_encoder
+                    resolved_encoder = detect_best_encoder().lower()
+                except Exception:
+                    pass
+        resolved_amd = resolved_encoder == "amd"
+        is_nv_selected = resolved_encoder in ("nv", "nvidia")
         is_nv_native = bool(
             is_nv_selected
             and options.get("nvidia_backend") in ("native_d3d11", "NVIDIA Native D3D11")
         )
-        is_intel = (selected_encoder == "intel")
+        is_nv_cuda = bool(is_nv_selected and not is_nv_native)
+        is_intel = resolved_encoder in ("intel", "qsv")
+        self.hud_preview_label.setPreviewFitEnabled(is_intel or is_nv_selected or resolved_amd)
         amd_use_standard_preview = bool(os.environ.get("TELEM_AMD_USE_NATIVE_PREVIEW") == "1")
         self._export_preview_hevc = bool(hud_on and resolved_amd and not amd_use_standard_preview)
-        self._export_preview_gpu_tap = bool(hud_on and ((resolved_amd and not amd_use_standard_preview) or is_nv_native or is_intel))
+        self._export_preview_gpu_tap = bool(hud_on and ((resolved_amd and not amd_use_standard_preview) or is_nv_selected or is_intel))
         self._export_preview_lightweight = False
         self._export_preview_native = False
         if self._export_preview_hevc:
@@ -1238,12 +1356,50 @@ class RenderTab(QWidget):
             self._preview_decoder = "native D3D11 GPU frame tap"
             self._preview_hardware_decode = "D3D11 VideoProcessor + async staging"
             self._preview_device = "NVIDIA native D3D11"
+            self._nv_preview_counters = {"polled": 0, "emitted": 0, "received": 0, "displayed": 0}
+            options["hud_preview"] = True
+            options["_nvidia_preview_counters"] = self._nv_preview_counters
             options["_nvidia_preview_tap"] = lambda buf, w, h, s, f, pts: self._on_amd_gpu_preview_frame(buf, w, h)
-        elif hud_on and is_intel:
+            self._update_preview_width()
+        elif hud_on and is_nv_cuda:
+            from src.ffmpeg.nvidia_cuda_preview import NvidiaCUDAPreviewServer
+            self._preview_decoder = "CUDA GPU compositor frame tap"
+            self._preview_hardware_decode = "scale_cuda + hwdownload"
+            self._preview_device = "NVIDIA CUDA"
+            preview_w = 960
+            preview_h = 540
+            preview_fps = 2.0
+            out_rotation = 0
+            try:
+                rot_str = str(options.get("rotation", "0")).strip().lower()
+                if rot_str not in ("auto", ""):
+                    out_rotation = int(rot_str)
+            except Exception:
+                out_rotation = 0
+            self._nvidia_cuda_preview_session = NvidiaCUDAPreviewServer(
+                on_frame=self._on_amd_gpu_preview_frame,
+                width=preview_w,
+                height=preview_h,
+                target_fps=preview_fps,
+                rotation=out_rotation,
+                enabled=hud_on,
+            )
+            options["_nvidia_cuda_preview_session"] = self._nvidia_cuda_preview_session
+            self._update_preview_width()
+        elif is_intel:
+            from src.ffmpeg.intel_preview import IntelPreviewChannel
             self._preview_decoder = "native D3D11 GPU frame tap"
             self._preview_hardware_decode = "D3D11 VideoProcessor + async staging"
             self._preview_device = "Intel native D3D11"
-            options["_intel_preview_tap"] = lambda buf, w, h: self._on_amd_gpu_preview_frame(buf, w, h)
+            generation = self._preview_generation_id
+            channel = IntelPreviewChannel(
+                lambda raw, w, h, ticket: self.signals.sig_export_preview_ready.emit(
+                    (generation, "intel_tap", raw, w, h, (channel, ticket))
+                ), enabled=hud_on,
+            )
+            self._intel_preview_channel = channel
+            options["_intel_preview_tap"] = channel
+            self._update_preview_width()
         elif self._export_preview_native:
             self._preview_decoder = "MPV/QMedia"
             self._preview_hardware_decode = "existing preview setting"
@@ -1274,12 +1430,12 @@ class RenderTab(QWidget):
             }
             if self._export_preview_hevc else None
         )
-        preview_w = getattr(self._amd_export_preview_session, "width", 0) if self._export_preview_hevc else (960 if (hud_on and (is_nv_native or is_intel)) else 0)
-        preview_h = getattr(self._amd_export_preview_session, "height", 0) if self._export_preview_hevc else (540 if (hud_on and (is_nv_native or is_intel)) else 0)
-        preview_fps = float(os.environ.get("AMD_EXPORT_PREVIEW_FPS", "2")) if self._export_preview_hevc else (8.0 if (hud_on and (is_nv_native or is_intel)) else 0.0)
+        preview_w = getattr(self._amd_export_preview_session, "width", 0) if self._export_preview_hevc else (960 if (hud_on and (is_nv_selected or is_intel)) else 0)
+        preview_h = getattr(self._amd_export_preview_session, "height", 0) if self._export_preview_hevc else (540 if (hud_on and (is_nv_selected or is_intel)) else 0)
+        preview_fps = float(os.environ.get("AMD_EXPORT_PREVIEW_FPS", "2")) if self._export_preview_hevc else (2.0 if (hud_on and (is_intel or is_nv_selected)) else 0.0)
         print(
-            f"[EXPORT PREVIEW] enabled={'True' if (self._export_preview_hevc or (hud_on and (is_nv_native or is_intel))) else 'False'} "
-            f"backend={'gpu_frame_tap' if (self._export_preview_hevc or (hud_on and (is_nv_native or is_intel))) else 'disabled'} "
+            f"[EXPORT PREVIEW] enabled={'True' if (self._export_preview_hevc or (hud_on and (is_nv_selected or is_intel))) else 'False'} "
+            f"backend={'gpu_frame_tap' if (self._export_preview_hevc or (hud_on and (is_nv_selected or is_intel))) else 'disabled'} "
             f"target_fps={preview_fps:g} target_size={preview_w}x{preview_h}",
             flush=True,
         )
@@ -1313,7 +1469,7 @@ class RenderTab(QWidget):
 
         # Developer A/B switch: TELEM_QUEUE_PROGRESS_UI=0 suppresses UI rebuilds during active render
         if os.environ.get("TELEM_QUEUE_PROGRESS_UI", "1").strip().lower() == "0":
-            if job.render_status in ("running", "finalizing", "preparing") and not job.is_done():
+            if job.render_status in ("running", "finalizing", "preparing", "waiting_ready") and not job.is_done():
                 return
 
         # Attempt fast in-place update first if the list structure matches
@@ -1523,6 +1679,7 @@ class RenderTab(QWidget):
         status_map = {
             "queued": "OCZEKUJE",
             "preparing": "PRZYGOTOWANIE",
+            "waiting_ready": "CZEKA NA GOTOWOŚĆ",
             "running": f"RENDER {pct_r}",
             "finalizing": f"FINALIZACJA {pct_r}",
             "done": "GOTOWY",
@@ -1897,6 +2054,15 @@ class RenderTab(QWidget):
         s.sig_bboxes_ready.connect(self.video_preview.set_bboxes)
         s.sig_video_duration_ready.connect(self.video_preview.on_duration_ready)
         s.sig_seek_position.connect(self.video_preview._on_seek_position)
+
+    def _on_export_target_changed(self) -> None:
+        ctrl = getattr(self, "_controller", None)
+        if ctrl is None or self._rendering or not getattr(ctrl, "project_ready", False):
+            return
+        if hasattr(ctrl, "_schedule_project_map_preparation"):
+            ctrl._schedule_project_map_preparation(reason="export_target_change")
+        elif hasattr(ctrl, "_trigger_map_background_prefetch"):
+            ctrl._trigger_map_background_prefetch(reason="export_target_change")
 
     def set_controller(self, controller: object) -> None:
         """Ustaw referencję do kontrolera (wywoływane z MainWindow)."""
@@ -2356,6 +2522,8 @@ class RenderTab(QWidget):
             # ETAP 5Z.2: tryb HDR zamrażany w opcjach zadania (kolejka nie czyta ustawień globalnych).
             "amd_hdr_mode": self.cmb_hdr_mode.currentData() or "preserve_hlg",
             "bitrate": self.edit_bitrate.text().strip(),
+            "cpu_profile": self.cmb_cpu_profile.currentData() or "balanced",
+            "cpu_rate_mode": self.cmb_cpu_rate_mode.currentData() or "abr",
             "output": self.edit_output.text().strip(),
             "nvidia_backend": self.cmb_nvidia_backend.currentData() or "legacy_cuda",
             "nvidia_codec": self.cmb_nvidia_codec.currentData() or self.cmb_nvidia_codec.currentText(),
@@ -2367,6 +2535,7 @@ class RenderTab(QWidget):
                 else "balanced"
             ) or "balanced",
             "preserve_original_gpmf": self.chk_original_gpmf.isChecked(),
+            "hud_preview": self.chk_hud_preview.isChecked(),
             "_gui_hud_preview_checkbox": self.chk_hud_preview.isChecked(),
         }
         if sources:
@@ -2398,6 +2567,19 @@ class RenderTab(QWidget):
         if ctrl is not None and getattr(ctrl, "_preview_telemetry_loading", False):
             QMessageBox.information(self, "Eksport", "Trwa wczytywanie telemetrii w tle. Poczekaj na zakończenie analizy.")
             return
+        # Prepare-on-load contract: Start only on a READY project.
+        if getattr(self, "_queue_wait", None):
+            QMessageBox.information(self, "Eksport", "Kolejka czeka na przygotowanie projektu. Poczekaj na jej start.")
+            return
+        state, reason = (ctrl.export_readiness_state()
+                         if ctrl is not None and hasattr(ctrl, "export_readiness_state") else ("ready", ""))
+        if state == "failed":
+            print(f"[PREPARE CONTRACT] Start refused state={state}: {reason}", flush=True)
+            QMessageBox.information(
+                self, "Eksport", f"Projekt nie jest gotowy do eksportu: {reason}. Eksport wymaga poprawnie przygotowanych danych.")
+            return
+        elif state == "preparing":
+            print(f"[PREPARE CONTRACT] Direct export requested while preparing: {reason}; pipeline will await READY asynchronously", flush=True)
         options = self._build_options_from_gui()
         raw_output = str(options.get("output") or "output_h265.mp4")
         try:
@@ -2467,6 +2649,20 @@ class RenderTab(QWidget):
 
     def _stop_export_preview(self, reason: str, *, wait: bool = True) -> None:
         """Stop Preview and release all resources owned by its generation."""
+        channel = self._intel_preview_channel
+        if channel is not None:
+            if reason == "checkbox_off":
+                channel.set_enabled(False)
+            else:
+                channel.close()
+                self._intel_preview_channel = None
+        nv_session = getattr(self, "_nvidia_cuda_preview_session", None)
+        if nv_session is not None:
+            if reason == "checkbox_off":
+                nv_session.set_enabled(False)
+            else:
+                nv_session.close()
+                self._nvidia_cuda_preview_session = None
         with self._preview_lock:
             stop_event = self._preview_stop_event
             stop_event.set()
@@ -2507,6 +2703,20 @@ class RenderTab(QWidget):
 
     def _on_preview_checkbox_changed(self, state: int) -> None:
         """Preview OFF is an explicit teardown, not merely a rate limiter."""
+        channel = self._intel_preview_channel
+        nv_session = getattr(self, "_nvidia_cuda_preview_session", None)
+        is_nv_native_dev = getattr(self, "_preview_device", "") == "NVIDIA native D3D11"
+        if (channel is not None or nv_session is not None or is_nv_native_dev) and self._rendering:
+            if channel is not None:
+                channel.set_enabled(bool(state))
+            if nv_session is not None:
+                nv_session.set_enabled(bool(state))
+            self._export_preview_gpu_tap = bool(state)
+            self.hud_preview_label.setVisible(bool(state))
+            self.preview_slot.setVisible(not bool(state))
+            if not state:
+                self.hud_preview_label.clear()
+            return
         if bool(state):
             if self._rendering and self._preview_stop_event.is_set():
                 self._start_export_preview_generation()
@@ -2628,13 +2838,10 @@ class RenderTab(QWidget):
                 snapshot.fps, status, final_eta=eta,
                 item_label=item_label,
                 is_indeterminate=is_indeterminate,
-                rate_text=(
-                    getattr(snapshot, "compression_text", "")
-                    if getattr(snapshot, "rate_control", "") else ""
-                ),
-
+                qp=snapshot.qp,
+                avg_qp=snapshot.avg_qp,
+                rate_text=getattr(snapshot, "compression_text", "") or "",
                 global_pct=snapshot.global_percent,
-
             )
         if snapshot.completed:
             self._is_indeterminate = False
@@ -3152,6 +3359,9 @@ class RenderTab(QWidget):
         if not self._rendering or self._cancelling or not self._export_preview_gpu_tap:
             return
         with self._preview_lock:
+            nv_cnt = getattr(self, "_nv_preview_counters", None)
+            if isinstance(nv_cnt, dict):
+                nv_cnt["received"] = int(nv_cnt.get("received", 0)) + 1
             generation = self._preview_generation_id
             self._gpu_tap_pending_payload = (
                 generation, "gpu_tap", bytes(raw), int(width), int(height)
@@ -3178,6 +3388,14 @@ class RenderTab(QWidget):
 
     def _on_export_preview_ready(self, payload) -> None:
         """Odbiera wyrenderowaną klatkę podglądu w głównym wątku GUI."""
+        if isinstance(payload, tuple) and len(payload) == 6 and payload[1] == "intel_tap":
+            generation, _, raw, width, height, (channel, ticket) = payload
+            try:
+                if channel.valid(ticket) and generation == self._preview_generation_id:
+                    self._on_export_preview_ready((generation, "gpu_tap", raw, width, height))
+            finally:
+                channel.release(ticket)
+            return
         if isinstance(payload, tuple) and len(payload) == 2 and payload[1] == "gpu_tap_latest":
             with self._preview_lock:
                 latest = self._gpu_tap_pending_payload
@@ -3204,6 +3422,7 @@ class RenderTab(QWidget):
         qimg = payload
         continuous_hevc = False
         gpu_tap = False
+        preview_profile_t0 = time.perf_counter()
         if isinstance(payload, tuple) and len(payload) == 5 and payload[1] in ("hevc", "gpu_tap"):
             worker_generation, _kind, raw, raw_w, raw_h = payload
             gpu_tap = _kind == "gpu_tap"
@@ -3232,6 +3451,7 @@ class RenderTab(QWidget):
             return
         if not self._rendering or self._cancelling or qimg is None:
             return
+        preview_profile_t1 = time.perf_counter()
         pix = QPixmap.fromImage(qimg)
         if continuous_hevc or gpu_tap:
             if gpu_tap:
@@ -3242,9 +3462,20 @@ class RenderTab(QWidget):
                     render_active=self._rendering,
                 )
                 pix = QPixmap.fromImage(qimg)
+            preview_profile_t2 = time.perf_counter()
             self.hud_preview_label.setPixmap(
-                pix.scaled(self.hud_preview_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                pix if (getattr(self, "_intel_preview_channel", None) is not None or getattr(self, "_nvidia_cuda_preview_session", None) is not None or getattr(self.hud_preview_label, "_fit", False))
+                else pix.scaled(self.hud_preview_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
             )
+            nv_cnt = getattr(self, "_nv_preview_counters", None)
+            if isinstance(nv_cnt, dict):
+                nv_cnt["displayed"] = int(nv_cnt.get("displayed", 0)) + 1
+            if gpu_tap and os.environ.get("TELEM_INTEL_PREVIEW_PROFILE") == "1":
+                print(f"[INTEL PREVIEW GUI PROFILE] qimage_ms={(preview_profile_t1 - preview_profile_t0) * 1000.0:.3f} "
+                      f"dim_pixmap_ms={(preview_profile_t2 - preview_profile_t1) * 1000.0:.3f} "
+                      f"scale_set_ms={(time.perf_counter() - preview_profile_t2) * 1000.0:.3f}", flush=True)
+            if gpu_tap and os.environ.get("TELEM_INTEL_ACCEPTANCE_DIR"):
+                print(f"[INTEL PREVIEW GUI] qpc_s={time.perf_counter():.6f} visible={int(self.hud_preview_label.isVisible())}",flush=True)
             src_tag = "INTEL_D3D11_FINAL_FRAME" if getattr(self, "_preview_device", "") == "Intel native D3D11" else "final_d3d11_frame"
             self._log_export_preview_once(
                 source=src_tag,
@@ -3489,6 +3720,8 @@ class RenderTab(QWidget):
 
     def _trigger_async_preview(self, ts: float) -> None:
         """Uruchamia asynchroniczny render klatki podglądu w tle (zero backpressure)."""
+        if self._intel_preview_channel is not None or getattr(self, "_nvidia_cuda_preview_session", None) is not None or getattr(self, "_export_preview_gpu_tap", False):
+            return  # Intel and NVIDIA GPU taps display only the final GPU surface, never a second HUD.
         if self._export_preview_hevc:
             return
         if (
@@ -3638,7 +3871,15 @@ class RenderTab(QWidget):
         print(f"hardware_decode={self._preview_hardware_decode}", flush=True)
         print(f"device={self._preview_device}", flush=True)
         print(f"workers={min(1, workers)}", flush=True)
-        print(f"updates={hevc_stats.get('updates', len(timings))}", flush=True)
+        nv_cnt = getattr(self, "_nv_preview_counters", None)
+        if getattr(self, "_preview_device", "") == "NVIDIA native D3D11" and isinstance(nv_cnt, dict):
+            print(f"updates={nv_cnt.get('displayed', 0)}", flush=True)
+            print(f"preview_polled={nv_cnt.get('polled', 0)}", flush=True)
+            print(f"preview_emitted={nv_cnt.get('emitted', 0)}", flush=True)
+            print(f"preview_received={nv_cnt.get('received', 0)}", flush=True)
+            print(f"preview_displayed={nv_cnt.get('displayed', 0)}", flush=True)
+        else:
+            print(f"updates={hevc_stats.get('updates', len(timings))}", flush=True)
         print(f"mean_ms={mean_ms:.3f}", flush=True)
         print(f"p95_ms={p95_ms:.3f}", flush=True)
         if hevc_stats:
@@ -3989,7 +4230,13 @@ class RenderTab(QWidget):
         if total_w < 100 or total_h < 100:
             return
 
-        preview_w, preview_h = preview_aspect_size(total_h - 36, total_w)
+        if self._intel_preview_channel is not None or getattr(self, "_nvidia_cuda_preview_session", None) is not None or getattr(self, "_export_preview_gpu_tap", False):
+            available_w = max(2, total_w - max(280, self.right_panel.sizeHint().width()) - 12)
+            available_h = max(2, total_h - 80)
+            preview_w = min(available_w, int(available_h * 16 / 9))
+            preview_h = max(1, int(preview_w * 9 / 16))
+        else:
+            preview_w, preview_h = preview_aspect_size(total_h - 36, total_w)
         self.left_panel.setFixedWidth(preview_w + 4)
         self.preview_slot.setFixedSize(preview_w, preview_h + 32)
         self.hud_preview_label.setFixedSize(preview_w, preview_h)
@@ -4016,6 +4263,19 @@ class RenderTab(QWidget):
         """
         if hasattr(self, "chk_original_gpmf"):
             self.chk_original_gpmf.setChecked(bool(settings.get("preserve_original_gpmf", False)))
+        if hasattr(self, "cmb_cpu_profile") and hasattr(self, "cmb_cpu_rate_mode"):
+            from src.ffmpeg.cpu_x265 import settings_to_cpu_choice
+            _cpu_profile, _cpu_mode, _cpu_legacy = settings_to_cpu_choice(settings)
+            i = self.cmb_cpu_profile.findData(_cpu_profile)
+            if i >= 0:
+                self.cmb_cpu_profile.setCurrentIndex(i)
+            i = self.cmb_cpu_rate_mode.findData(_cpu_mode)
+            if i >= 0:
+                self.cmb_cpu_rate_mode.setCurrentIndex(i)
+            if _cpu_legacy:
+                print("[CPU] export settings without cpu_rate_mode (saved before P0.3): "
+                      "keeping previous encoding Jakość (medium) + CRF 24; choose a mode to change it",
+                      flush=True)
         if "encoder_profile" in settings and hasattr(self, "cmb_encoder_profile"):
             prof = EncoderProfile.from_str(settings["encoder_profile"], default=DEFAULT_ENCODER_PROFILE)
             idx = self.cmb_encoder_profile.findData(prof.value)
@@ -4186,32 +4446,42 @@ class RenderTab(QWidget):
         )
 
         items: list[tuple[str, str]] = []
-        if caps.nvidia_h264_nvenc:
-            items.append(("H.264", "H.264"))
-        if caps.nvidia_hevc_nvenc:
-            items.append(("H.265", "HEVC"))
+        # Target items:
+        # - AV1 — 10-bit HDR (only if GPU and backend support it; disabled on Pascal P400)
+        # - H.265 — Main10 / HDR (Zalecany)
+        # - H.264 — 8-bit SDR
+        # - H.265 — 8-bit SDR
         if caps.nvidia_av1_nvenc:
-            items.append(("AV1", "AV1"))
+            items.append(("AV1 — 10-bit HDR", "av1"))
+        if caps.nvidia_hevc_nvenc:
+            items.append(("H.265 — Main10 / HDR (Zalecany)", "hevc_main10"))
+        if caps.nvidia_h264_nvenc:
+            items.append(("H.264 — 8-bit SDR", "h264"))
+        if caps.nvidia_hevc_nvenc:
+            items.append(("H.265 — 8-bit SDR", "hevc_sdr"))
 
         if not items:
             items = [("Brak NVENC", "none")]
 
         self.cmb_nvidia_codec.blockSignals(True)
         self.cmb_nvidia_codec.clear()
-        self.cmb_nvidia_codec.addItems(items)
+        for label, data in items:
+            self.cmb_nvidia_codec.addItem(label, data)
 
         target_idx = -1
         if current_val:
-            c_norm = str(current_val).strip().upper()
-            if "AV1" in c_norm:
-                target_idx = self.cmb_nvidia_codec.findData("AV1")
-            elif "264" in c_norm or "AVC" in c_norm:
-                target_idx = self.cmb_nvidia_codec.findData("H.264")
-            elif "HEVC" in c_norm or "265" in c_norm:
-                target_idx = self.cmb_nvidia_codec.findData("HEVC")
+            c_norm = str(current_val).strip().lower()
+            if "av1" in c_norm:
+                target_idx = self.cmb_nvidia_codec.findData("av1")
+            elif "264" in c_norm or "avc" in c_norm:
+                target_idx = self.cmb_nvidia_codec.findData("h264")
+            elif "sdr" in c_norm:
+                target_idx = self.cmb_nvidia_codec.findData("hevc_sdr")
+            elif "main10" in c_norm or "hdr" in c_norm or "hevc" in c_norm or "265" in c_norm:
+                target_idx = self.cmb_nvidia_codec.findData("hevc_main10")
 
         if target_idx < 0:
-            idx_hevc = self.cmb_nvidia_codec.findData("HEVC")
+            idx_hevc = self.cmb_nvidia_codec.findData("hevc_main10")
             target_idx = idx_hevc if idx_hevc >= 0 else 0
 
         self.cmb_nvidia_codec.setCurrentIndex(target_idx)
@@ -4226,10 +4496,10 @@ class RenderTab(QWidget):
         caps = query_backend_capabilities()
 
         items: list[tuple[str, str]] = []
-        if caps.nvidia_legacy_cuda:
-            items.append(("NVIDIA CUDA", "legacy_cuda"))
         if caps.nvidia_native_d3d11:
             items.append(("NVIDIA Native D3D11", "native_d3d11"))
+        if caps.nvidia_legacy_cuda:
+            items.append(("NVIDIA CUDA", "legacy_cuda"))
 
         if not items:
             items = [("NVIDIA (niedostępny)", "none")]
